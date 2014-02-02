@@ -14,6 +14,7 @@ set(BUILD_SINGLE_LIB      ON                                        CACHE BOOL  
 set(LIB_SUFFIX            ""                                        CACHE STRING  "'64' to install libraries into ${PREFIX}/lib64")
 set(INCLUDE_INSTALL_DIR   ${CMAKE_INSTALL_PREFIX}/include/d         CACHE PATH    "Path to install D modules to")
 set(BUILD_SHARED_LIBS     OFF                                       CACHE BOOL    "Whether to build the runtime as a shared library (*UNSUPPORTED*)")
+set(TARGET_C_FLAGS        ""                                        CACHE STRING  "Runtime build flags for C code")
 set(D_FLAGS               -w;-d                                     CACHE STRING  "Runtime build flags, separated by ;")
 set(D_FLAGS_DEBUG         -g                                        CACHE STRING  "Runtime build flags (debug libraries), separated by ;")
 set(D_FLAGS_RELEASE       -O3;-release                              CACHE STRING  "Runtime build flags (release libraries), separated by ;")
@@ -468,7 +469,7 @@ endmacro()
 macro(build_runtime_variants d_flags c_flags ld_flags path_suffix outlist_targets)
     build_runtime(
         "${d_flags};${D_FLAGS};${D_FLAGS_RELEASE}"
-        "${c_flags}"
+        "${c_flags} ${TARGET_C_FLAGS}"
         "${ld_flags}"
         ""
         "${path_suffix}"
@@ -476,7 +477,7 @@ macro(build_runtime_variants d_flags c_flags ld_flags path_suffix outlist_target
     )
     build_runtime(
         "${d_flags};${D_FLAGS};${D_FLAGS_DEBUG}"
-        "${c_flags}"
+        "${c_flags} ${TARGET_C_FLAGS}"
         "${ld_flags}"
         "-debug"
         "${path_suffix}"
@@ -518,7 +519,7 @@ if(MULTILIB)
         set(hostsuffix "${LIB_SUFFIX}${HOST_BITNESS}")
 
         set(hosttargets)
-        build_runtime_variants("" "${RT_CLAGS}" "${LD_FLAGS}" "${hostsuffix}" hosttargets)
+        build_runtime_variants("" "${RT_CFLAGS}" "${LD_FLAGS}" "${hostsuffix}" hosttargets)
 
         set(multitargets)
         build_runtime_variants("-m${MULTILIB_SUFFIX}" "-m${MULTILIB_SUFFIX} ${RT_CFLAGS}" "-m${MULTILIB_SUFFIX} ${LD_FLAGS}" "${MULTILIB_SUFFIX}" multitargets)
@@ -538,11 +539,11 @@ if(MULTILIB)
             list(APPEND LIBS_TO_INSTALL ${t})
         endforeach()
     else()
-        build_runtime_variants("" "${RT_CLAGS}" "${LD_FLAGS}" "${LIB_SUFFIX}" LIBS_TO_INSTALL)
+        build_runtime_variants("" "${RT_CFLAGS}" "${LD_FLAGS}" "${LIB_SUFFIX}" LIBS_TO_INSTALL)
         build_runtime_variants("-m${MULTILIB_SUFFIX}" "-m${MULTILIB_SUFFIX} ${RT_CFLAGS}" "-m${MULTILIB_SUFFIX} ${LD_FLAGS}" "${MULTILIB_SUFFIX}" dummy)
     endif()
 else()
-    build_runtime_variants("" "${RT_CLAGS}" "${LD_FLAGS}" "${LIB_SUFFIX}" LIBS_TO_INSTALL)
+    build_runtime_variants("" "${RT_CFLAGS}" "${LD_FLAGS}" "${LIB_SUFFIX}" LIBS_TO_INSTALL)
 endif()
 
 # Copy over druntime modules, preferring hand-written .di files.
