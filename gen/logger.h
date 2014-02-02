@@ -15,7 +15,7 @@
 #ifndef LDC_GEN_LOGGER_H
 #define LDC_GEN_LOGGER_H
 
-#include <iosfwd>
+#include <ostream>
 
 namespace llvm {
     class Type;
