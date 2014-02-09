@@ -266,6 +266,8 @@ macro(dc input_d d_flags output_dir output_suffix outlist_o outlist_bc)
     add_custom_command(
         OUTPUT
             ${outfiles}
+        # dano - TODO: use a script for easy interception of D compile command
+        #COMMAND /Users/dan/projects/ldc/ldcxyzzy ${LDC_LOC} ${dc_flags} -c -I${RUNTIME_INCLUDE} -I${RUNTIME_GC_DIR} ${input_d} -of${output_o} ${d_flags}
         COMMAND ${LDC_LOC} ${dc_flags} -c -I${RUNTIME_INCLUDE} -I${RUNTIME_GC_DIR} ${input_d} -of${output_o} ${d_flags}
         WORKING_DIRECTORY ${PROJECT_PARENT_DIR}
         DEPENDS ${LDC_LOC}
