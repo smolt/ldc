@@ -20,9 +20,9 @@ struct complex_t
     longdouble im;
 
     complex_t() { this->re = 0; this->im = 0; }
-    complex_t(longdouble re) { this->re = re; this->im = 0; }
+    //complex_t(longdouble re) { this->re = re; this->im = 0; }
     complex_t(double re) { this->re = re; this->im = 0; }
-    complex_t(longdouble re, longdouble im) { this->re = re; this->im = im; }
+    //complex_t(longdouble re, longdouble im) { this->re = re; this->im = im; }
     complex_t(double re, double im) { this->re = re; this->im = im; }
 
     complex_t operator + (complex_t y) { complex_t r; r.re = re + y.re; r.im = im + y.im; return r; }

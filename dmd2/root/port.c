@@ -463,7 +463,9 @@ longdouble Port::ldbl_infinity = 1 / zero;
 
 double Port::dbl_max = 1.7976931348623157e308;
 double Port::dbl_min = 5e-324;
-longdouble Port::ldbl_max = LDBL_MAX;
+// dano - TODO:
+//longdouble Port::ldbl_max = LDBL_MAX;
+longdouble Port::ldbl_max = DBL_MAX;
 
 struct PortInitializer
 {
@@ -588,6 +590,8 @@ int Port::isNan(double r)
 #endif
 }
 
+// dano - TODO: arm uses longdouble same as double
+#if 0
 int Port::isNan(longdouble r)
 {
 #if __APPLE__
@@ -603,6 +607,7 @@ int Port::isNan(longdouble r)
     return ::isnan(r);
 #endif
 }
+#endif
 
 int Port::isSignallingNan(double r)
 {
@@ -612,6 +617,8 @@ int Port::isSignallingNan(double r)
     return isNan(r) && !((((unsigned char*)&r)[6]) & 8);
 }
 
+// dano - TODO: arm uses longdouble same as double
+#if 0
 int Port::isSignallingNan(longdouble r)
 {
     /* A signalling NaN is a NaN with 0 as the most significant bit of
@@ -619,6 +626,7 @@ int Port::isSignallingNan(longdouble r)
      */
     return isNan(r) && !((((unsigned char*)&r)[7]) & 0x40);
 }
+#endif
 
 int Port::isInfinity(double r)
 {
