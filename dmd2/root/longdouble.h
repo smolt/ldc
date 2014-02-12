@@ -12,8 +12,33 @@
 #define __LONG_DOUBLE_H__
 
 #include <stdio.h>
+// dano - TODO: hack this in for now
+#if 0
 typedef long double longdouble;
 typedef volatile long double volatile_longdouble;
+#else
+typedef double longdouble;
+typedef volatile double volatile_longdouble;
+#undef LDBL_DIG
+#undef LDBL_MAX
+#undef LDBL_MIN
+#undef LDBL_EPSILON
+#undef LDBL_MANT_DIG
+#undef LDBL_MAX_EXP
+#undef LDBL_MIN_EXP
+#undef LDBL_MAX_10_EXP
+#undef LDBL_MIN_10_EXP
+
+#define LDBL_DIG  DBL_DIG
+#define LDBL_MAX  DBL_MAX
+#define LDBL_MIN  DBL_MIN
+#define LDBL_EPSILON  DBL_EPSILON
+#define LDBL_MANT_DIG DBL_MANT_DIG
+#define LDBL_MAX_EXP DBL_MAX_EXP
+#define LDBL_MIN_EXP DBL_MIN_EXP
+#define LDBL_MAX_10_EXP DBL_MAX_10_EXP
+#define LDBL_MIN_10_EXP DBL_MIN_10_EXP
+#endif
 
 // also used from within C code, so use a #define rather than a template
 // template<typename T> longdouble ldouble(T x) { return (longdouble) x; }

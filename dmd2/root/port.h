@@ -50,10 +50,10 @@ struct Port
     static bool yl2xp1_supported;
 
     static int isNan(double);
-    static int isNan(longdouble);
+    //static int isNan(longdouble);
 
     static int isSignallingNan(double);
-    static int isSignallingNan(longdouble);
+    //static int isSignallingNan(longdouble);
 
     static int isInfinity(double);
 
