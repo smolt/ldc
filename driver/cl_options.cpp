@@ -377,6 +377,13 @@ cl::opt<bool> linkonceTemplates("linkonce-templates",
     cl::desc("Use linkonce_odr linkage for template symbols instead of weak_odr"),
     cl::ZeroOrMore);
 
+// Useful if target OS does not have TLS or threads, or perhaps you are
+// writing an OS.
+cl::opt<bool, true> disableTls("disable-tls",
+    cl::desc("Disable thread local storage (variables become __gshared"),
+    cl::location(global.params.disableTls),
+    cl::init(false));
+
 static cl::extrahelp footer("\n"
 "-d-debug can also be specified without options, in which case it enables all\n"
 "debug checks (i.e. (asserts, boundchecks, contracts and invariants) as well\n"
