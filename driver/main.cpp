@@ -821,6 +821,9 @@ static void registerPredefinedVersions() {
     if (!global.params.useArrayBounds)
         VersionCondition::addPredefinedGlobalIdent("D_NoBoundsChecks");
 
+    if (global.params.disableTls)
+        VersionCondition::addPredefinedGlobalIdent("NoThreadLocalStorage");
+
     registerPredefinedTargetVersions();
 
 #if LDC_LLVM_VER >= 303

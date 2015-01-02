@@ -1898,11 +1898,11 @@ llvm::GlobalVariable* getOrCreateGlobal(Loc& loc, llvm::Module& module,
         return existing;
     }
 
-#if 1 // dano - TODO: get TLS working for iOS, but for now...
-    return new llvm::GlobalVariable(module, type, isConstant, linkage,
-                                    init, name, 0,
-                                    llvm::GlobalVariable::NotThreadLocal);
-#else
+    // disable thread locals if requested.  This is useful if target
+    // OS/runtime does not support thread locals or threads
+    if (global.params.disableTls)
+        isThreadLocal = false;
+
 #if LDC_LLVM_VER >= 302
     // Use a command line option for the thread model.
     // On PPC there is only local-exec available - in this case just ignore the
@@ -1919,7 +1919,6 @@ llvm::GlobalVariable* getOrCreateGlobal(Loc& loc, llvm::Module& module,
     return new llvm::GlobalVariable(module, type, isConstant, linkage,
                                     init, name, 0, isThreadLocal);
 #endif
-#endif // dano - TODO:
 }
 
 FuncDeclaration* getParentFunc(Dsymbol* sym, bool stopOnStatic)

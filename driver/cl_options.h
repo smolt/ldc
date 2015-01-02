@@ -73,6 +73,7 @@ namespace opts {
     extern cl::opt<bool, true> singleObj;
     extern cl::opt<bool> linkonceTemplates;
     extern cl::opt<bool> disableLinkerStripDead;
+    extern cl::opt<bool, true> disableTls;
 
     extern cl::opt<BoundsCheck> boundsCheck;
     extern bool nonSafeBoundsChecks;
