@@ -103,6 +103,11 @@ static cl::opt<bool, true> vgc("vgc",
     cl::ZeroOrMore,
     cl::location(global.params.vgc));
 
+static cl::opt<bool, true> verboseTls("vtls",
+    cl::desc("list TLS variables (useful if -fthread-model=none)"),
+    cl::ZeroOrMore,
+    cl::location(global.params.vtls));
+
 static cl::opt<bool, true> verbose_cg("v-cg",
     cl::desc("Verbose codegen"),
     cl::ZeroOrMore,
