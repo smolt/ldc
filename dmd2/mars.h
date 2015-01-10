@@ -270,6 +270,7 @@ struct Param
     // Codegen cl options
     bool singleObj;
     bool disableRedZone;
+    bool disableTls;
 #endif
 };
 

@@ -44,10 +44,10 @@ struct Port
     static longdouble ldbl_max;
 
     static int isNan(double);
-    static int isNan(longdouble);
+    //static int isNan(longdouble);
 
     static int isSignallingNan(double);
-    static int isSignallingNan(longdouble);
+    //static int isSignallingNan(longdouble);
 
     static int isInfinity(double);
 

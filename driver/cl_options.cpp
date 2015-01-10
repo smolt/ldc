@@ -75,6 +75,11 @@ static cl::opt<bool, true> verbose("v",
     cl::ZeroOrMore,
     cl::location(global.params.verbose));
 
+static cl::opt<bool, true> verboseTls("vtls",
+    cl::desc("list TLS variables (useful if -fthread-model=none)"),
+    cl::ZeroOrMore,
+    cl::location(global.params.vtls));
+
 static cl::opt<bool, true> verbose_cg("v-cg",
     cl::desc("Verbose codegen"),
     cl::ZeroOrMore,
@@ -389,6 +394,13 @@ cl::opt<unsigned, true> nestedTemplateDepth("template-depth",
     cl::desc("(experimental) set maximum number of nested template instantiations"),
     cl::location(global.params.nestedTmpl),
     cl::init(500));
+
+// Useful if target OS does not have TLS or threads, or perhaps you are
+// writing an OS.
+cl::opt<bool, true> disableTls("disable-tls",
+    cl::desc("Disable thread local storage (variables become __gshared"),
+    cl::location(global.params.disableTls),
+    cl::init(false));
 
 
 static cl::extrahelp footer("\n"
