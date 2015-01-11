@@ -731,6 +731,7 @@ static void registerPredefinedTargetVersions() {
             VersionCondition::addPredefinedGlobalIdent("Posix");
             break;
         case llvm::Triple::Darwin:
+        case llvm::Triple::IOS:
             VersionCondition::addPredefinedGlobalIdent("OSX");
             VersionCondition::addPredefinedGlobalIdent("darwin"); // For backwards compatibility.
             VersionCondition::addPredefinedGlobalIdent("Posix");
@@ -794,6 +795,9 @@ static void registerPredefinedVersions() {
 
     if (!global.params.useArrayBounds)
         VersionCondition::addPredefinedGlobalIdent("D_NoBoundsChecks");
+
+    if (global.params.disableTls)
+        VersionCondition::addPredefinedGlobalIdent("NoThreadLocalStorage");
 
     registerPredefinedTargetVersions();
 

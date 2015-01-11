@@ -601,6 +601,15 @@ DValue* DtoCallFunction(Loc& loc, Type* resulttype, DValue* fnval, Expressions* 
                 LLValue* arg = argval->getRVal();
 
                 // FIXME: do we need any param attrs here ?
+#if 1
+                // Try to get C parameter passing correct
+                if (DtoIsPassedByRef(argval->getType()))
+                {
+                    llvm::AttrBuilder moreAttrs;
+                    moreAttrs.addAttribute(llvm::Attribute::ByVal);
+                    addToAttributes(attrs, beg + i + 1, moreAttrs);
+                }
+#endif
 
                 ++argiter;
                 args.push_back(arg);
