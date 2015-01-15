@@ -104,7 +104,7 @@ static cl::opt<bool, true> vgc("vgc",
     cl::location(global.params.vgc));
 
 static cl::opt<bool, true> verboseTls("vtls",
-    cl::desc("list TLS variables (useful if -fthread-model=none)"),
+    cl::desc("list TLS variables (useful if -disable-tls used)"),
     cl::ZeroOrMore,
     cl::location(global.params.vtls));
 
