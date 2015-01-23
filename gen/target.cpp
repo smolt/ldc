@@ -30,7 +30,11 @@ void Target::init()
 {
     ptrsize = gDataLayout->getPointerSize(ADDRESS_SPACE);
 
+#if USE_REAL64
+    llvm::Type* real = DtoType(Type::basic[Tfloat64]);
+#else
     llvm::Type* real = DtoType(Type::basic[Tfloat80]);
+#endif
     realsize = gDataLayout->getTypeAllocSize(real);
     realpad = realsize - gDataLayout->getTypeStoreSize(real);
     realalignsize = gDataLayout->getABITypeAlignment(real);
