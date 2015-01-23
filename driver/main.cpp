@@ -126,6 +126,7 @@ void printVersion() {
 #endif
 #endif
     printf("  Default target: %s\n", llvm::sys::getDefaultTargetTriple().c_str());
+    printf("  Real size: %d\n", sizeof(longdouble));
     std::string CPU = llvm::sys::getHostCPUName();
     if (CPU == "generic") CPU = "(unknown)";
     printf("  Host CPU: %s\n", CPU.c_str());

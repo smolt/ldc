@@ -659,9 +659,7 @@ longdouble Port::ldbl_infinity = 1 / zero;
 
 double Port::dbl_max = 1.7976931348623157e308;
 double Port::dbl_min = 5e-324;
-// dano - TODO:
-//longdouble Port::ldbl_max = LDBL_MAX;
-longdouble Port::ldbl_max = DBL_MAX;
+longdouble Port::ldbl_max = LDBL_MAX;
 
 #if __i386 || __x86_64__
 bool Port::yl2x_supported = true;
@@ -792,8 +790,7 @@ int Port::isNan(double r)
 #endif
 }
 
-// dano - TODO: arm uses longdouble same as double
-#if 0
+#if !USE_REAL64
 int Port::isNan(longdouble r)
 {
 #if __APPLE__
@@ -819,8 +816,7 @@ int Port::isSignallingNan(double r)
     return isNan(r) && !((((unsigned char*)&r)[6]) & 8);
 }
 
-// dano - TODO: arm uses longdouble same as double
-#if 0
+#if !USE_REAL64
 int Port::isSignallingNan(longdouble r)
 {
     /* A signalling NaN is a NaN with 0 as the most significant bit of
@@ -844,12 +840,16 @@ int Port::isInfinity(double r)
 
 longdouble Port::sqrt(longdouble x)
 {
+#if USE_REAL64
+    return ::sqrt(x);
+#else
     return ::sqrtl(x);
+#endif
 }
 
 longdouble Port::fmodl(longdouble x, longdouble y)
 {
-#if __FreeBSD__ && __FreeBSD_version < 800000 || __OpenBSD__
+#if __FreeBSD__ && __FreeBSD_version < 800000 || __OpenBSD__ || USE_REAL64
     return ::fmod(x, y);        // hack for now, fix later
 #else
     return ::fmodl(x, y);
@@ -953,7 +953,11 @@ double Port::strtod(const char *p, char **endp)
 
 longdouble Port::strtold(const char *p, char **endp)
 {
+#if USE_REAL64
+    return ::strtod(p, endp);
+#else
     return ::strtold(p, endp);
+#endif
 }
 
 #endif
