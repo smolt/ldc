@@ -156,6 +156,7 @@ bool VersionCondition::isPredefined(const char *ident)
         "Win64",
         "linux",
         "OSX",
+        "IPhoneOS",
         "FreeBSD",
         "OpenBSD",
         "NetBSD",

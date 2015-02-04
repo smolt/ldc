@@ -126,7 +126,7 @@ void printVersion() {
 #endif
 #endif
     printf("  Default target: %s\n", llvm::sys::getDefaultTargetTriple().c_str());
-    printf("  Real size: %d\n", sizeof(longdouble));
+    printf("  Real size: %lu\n", sizeof(longdouble));
     std::string CPU = llvm::sys::getHostCPUName();
     if (CPU == "generic") CPU = "(unknown)";
     printf("  Host CPU: %s\n", CPU.c_str());
@@ -756,8 +756,15 @@ static void registerPredefinedTargetVersions() {
             VersionCondition::addPredefinedGlobalIdent("Haiku");
             VersionCondition::addPredefinedGlobalIdent("Posix");
             break;
-        case llvm::Triple::Darwin:
         case llvm::Triple::IOS:
+            VersionCondition::addPredefinedGlobalIdent("IPhoneOS");
+            // fall through because most runtime OSX code is correct for iOS
+            // This is kind of how these C macros work
+            //                         Mac OSX    iOS    iOS sim
+            // TARGET_IPHONE_SIMULATOR   1         1      1
+            // TARGET_OS_IPHONE          1         1      0
+            // TARGET_OS_MAC             1         0      0
+        case llvm::Triple::Darwin:
             VersionCondition::addPredefinedGlobalIdent("OSX");
             VersionCondition::addPredefinedGlobalIdent("darwin"); // For backwards compatibility.
             VersionCondition::addPredefinedGlobalIdent("Posix");
