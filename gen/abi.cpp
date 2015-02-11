@@ -10,6 +10,7 @@
 #include "gen/abi.h"
 #include "mars.h"
 #include "gen/abi-generic.h"
+#include "gen/abi-ios.h"
 #include "gen/abi-ppc64.h"
 #include "gen/abi-win64.h"
 #include "gen/abi-x86-64.h"
@@ -97,6 +98,11 @@ TargetABI * TargetABI::getTarget()
     case llvm::Triple::ppc64le:
 #endif
         return getPPC64TargetABI(global.params.targetTriple.isArch64Bit());
+    case llvm::Triple::arm:
+    case llvm::Triple::thumb:
+        if (global.params.targetTriple.isiOS())
+            return getIOSTargetABI();
+        // fall thru, don't know about other arm targets yet
     default:
         Logger::cout() << "WARNING: Unknown ABI, guessing...\n";
         return new UnknownTargetABI;
