@@ -292,11 +292,9 @@ Usage:\n\
   -v             verbose\n\
   -vdmd          print the command used to invoke the underlying compiler\n\
   -version=level compile in version code >= level\n\
-  -version=ident compile in version code identified by ident\n"
-#if 0
-"  -vtls          list all variables going into thread local storage\n"
-#endif
-"  -w             enable warnings\n\
+  -version=ident compile in version code identified by ident\n\
+  -vtls          list all variables going into thread local storage\n\
+  -w             enable warnings\n\
   -wi            enable informational warnings\n\
   -X             generate JSON file\n\
   -Xffilename    write JSON file to filename\n\n", argv0
@@ -948,7 +946,7 @@ void buildCommandLine(std::vector<const char*>& r, const Params& p)
     else if (p.targetModel == Model::m64) r.push_back("-m64");
     if (p.profile) warning("CPU profile generation not yet supported by LDC.");
     if (p.verbose) r.push_back("-v");
-    if (p.logTlsUse) warning("-vtls not yet supported by LDC.");
+    if (p.logTlsUse) r.push_back("-vtls");
     if (p.warnings == Warnings::asErrors) r.push_back("-w");
     else if (p.warnings == Warnings::informational) r.push_back("-wi");
     if (p.optimize) r.push_back("-O3");

@@ -971,7 +971,7 @@ void DtoResolveVariable(VarDeclaration* vd)
 
         llvm::GlobalVariable* gvar = getOrCreateGlobal(vd->loc, *gIR->module,
             i1ToI8(DtoType(vd->type)), isLLConst, linkage, 0, llName,
-            vd->isThreadlocal());
+            vd->isThreadlocal(), vd->toChars());
         getIrGlobal(vd)->value = gvar;
 
         // Set the alignment (it is important not to use type->alignsize because
@@ -1877,7 +1877,8 @@ llvm::Constant* DtoConstSymbolAddress(Loc& loc, Declaration* decl)
 
 llvm::GlobalVariable* getOrCreateGlobal(Loc& loc, llvm::Module& module,
     llvm::Type* type, bool isConstant, llvm::GlobalValue::LinkageTypes linkage,
-    llvm::Constant* init, llvm::StringRef name, bool isThreadLocal)
+    llvm::Constant* init, llvm::StringRef name, bool isThreadLocal,
+    const char *prettyName)
 {
     llvm::GlobalVariable* existing = module.getGlobalVariable(name, true);
     if (existing)
@@ -1890,6 +1891,21 @@ llvm::GlobalVariable* getOrCreateGlobal(Loc& loc, llvm::Module& module,
         }
         return existing;
     }
+
+    if (isThreadLocal && global.params.vtls)
+    {
+        char* p = loc.toChars();
+        fprintf(global.stdmsg, "%s: %s is thread local%s\n",
+                p ? p : "",
+                prettyName ? prettyName : name.str().c_str(),
+                global.params.disableTls ? " (but TLS is disabled)" : "");
+        if (p) mem.free(p);
+    }
+
+    // disable thread locals if requested.  This is useful if target
+    // OS/runtime does not support thread locals or threads
+    if (global.params.disableTls)
+        isThreadLocal = false;
 
 #if LDC_LLVM_VER >= 302
     // Use a command line option for the thread model.

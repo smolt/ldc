@@ -21,9 +21,13 @@ struct complex_t
     longdouble im;
 
     complex_t() { this->re = 0; this->im = 0; }
+#if !USE_REAL64    // don't need (and error) if longdouble typedefed as double
     complex_t(longdouble re) { this->re = re; this->im = 0; }
+#endif
     complex_t(double re) { this->re = re; this->im = 0; }
+#if !USE_REAL64    // ditto
     complex_t(longdouble re, longdouble im) { this->re = re; this->im = im; }
+#endif
     complex_t(double re, double im) { this->re = re; this->im = im; }
 
     complex_t operator + (complex_t y) { complex_t r; r.re = re + y.re; r.im = im + y.im; return r; }

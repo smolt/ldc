@@ -634,6 +634,7 @@ int Port::isNan(double r)
 #endif
 }
 
+#if !USE_REAL64
 int Port::isNan(longdouble r)
 {
 #if __APPLE__
@@ -649,6 +650,7 @@ int Port::isNan(longdouble r)
     return ::isnan(r);
 #endif
 }
+#endif
 
 int Port::isSignallingNan(double r)
 {
@@ -658,6 +660,7 @@ int Port::isSignallingNan(double r)
     return isNan(r) && !((((unsigned char*)&r)[6]) & 8);
 }
 
+#if !USE_REAL64
 int Port::isSignallingNan(longdouble r)
 {
     /* A signalling NaN is a NaN with 0 as the most significant bit of
@@ -665,6 +668,7 @@ int Port::isSignallingNan(longdouble r)
      */
     return isNan(r) && !((((unsigned char*)&r)[7]) & 0x40);
 }
+#endif
 
 int Port::isInfinity(double r)
 {
@@ -680,12 +684,16 @@ int Port::isInfinity(double r)
 
 longdouble Port::sqrt(longdouble x)
 {
+#if USE_REAL64
+    return ::sqrt(x);
+#else
     return ::sqrtl(x);
+#endif
 }
 
 longdouble Port::fmodl(longdouble x, longdouble y)
 {
-#if __FreeBSD__ && __FreeBSD_version < 800000 || __OpenBSD__
+#if __FreeBSD__ && __FreeBSD_version < 800000 || __OpenBSD__ || USE_REAL64
     return ::fmod(x, y);        // hack for now, fix later
 #else
     return ::fmodl(x, y);
@@ -767,7 +775,11 @@ double Port::strtod(const char *p, char **endp)
 
 longdouble Port::strtold(const char *p, char **endp)
 {
+#if USE_REAL64
+    return ::strtod(p, endp);
+#else
     return ::strtold(p, endp);
+#endif
 }
 
 #endif

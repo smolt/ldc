@@ -106,6 +106,9 @@ static void codegenModule(llvm::TargetMachine &Target, llvm::Module& m,
 #endif
 
     llvm::formatted_raw_ostream fout(out);
+    // dano - TODO: I am curious if this should be changed to
+    // this. codeGenOptLevel() is an enum, not a true/false
+    //if (Target.addPassesToEmitFile(Passes, fout, fileType, false))
     if (Target.addPassesToEmitFile(Passes, fout, fileType, codeGenOptLevel()))
         llvm_unreachable("no support for asm output");
 

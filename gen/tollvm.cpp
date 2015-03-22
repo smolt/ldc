@@ -38,7 +38,12 @@ bool DtoIsPassedByRef(Type* type)
 {
     Type* typ = type->toBasetype();
     TY t = typ->ty;
+#if 0
+    // TODO: look into fixing this.  May be solution for passing structs by value.
+    return (t == Tsarray);
+#else
     return (t == Tstruct || t == Tsarray);
+#endif
 }
 
 RET retStyle(TypeFunction *tf)
