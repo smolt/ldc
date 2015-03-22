@@ -21,12 +21,9 @@ struct IOSTargetABI : TargetABI
         case LINKcpp:
         case LINKpascal:
         case LINKwindows:
-            return llvm::CallingConv::C;
         case LINKd:
         case LINKdefault:
-            return llvm::CallingConv::Fast;
-            // TODO: if we want to match the iOS C abi for D calls.
-            //return llvm::CallingConv::C;
+            return llvm::CallingConv::C;
         default:
             llvm_unreachable("Unhandled D linkage type.");
         }
