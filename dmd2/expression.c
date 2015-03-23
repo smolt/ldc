@@ -1668,7 +1668,14 @@ bool functionParameters(Loc loc, Scope *sc, TypeFunction *tf,
             }
             if (p->storageClass & STCref)
             {
-                arg = arg->toLvalue(sc, arg);
+                if (p->storageClass & STCauto &&
+                    (arg->op == TOKthis || arg->op == TOKsuper))
+                {
+                    // suppress deprecation message for auto ref parameter
+                    // temporary workaround for Bugzilla 14283
+                }
+                else
+                    arg = arg->toLvalue(sc, arg);
             }
             else if (p->storageClass & STCout)
             {
@@ -3544,16 +3551,21 @@ bool ThisExp::isBool(bool result)
 
 bool ThisExp::isLvalue()
 {
-    // Class `this` is an rvalue; struct `this` is an lvalue.
-    return (type->toBasetype()->ty != Tclass);
+    // Class `this` should be an rvalue; struct `this` should be an lvalue.
+    // Need to deprecate the old behavior first, see Bugzilla 14262.
+    return true;
 }
 
 Expression *ThisExp::toLvalue(Scope *sc, Expression *e)
 {
     if (type->toBasetype()->ty == Tclass)
     {
-        // Class `this` is an rvalue; struct `this` is an lvalue.
-        return Expression::toLvalue(sc, e);
+        // use Expression::toLvalue when deprecation is over
+        if (!e)
+            e = this;
+        else if (!loc.filename)
+            loc = e->loc;
+        deprecation("%s is not an lvalue", e->toChars());
     }
     return this;
 }

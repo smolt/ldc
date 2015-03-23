@@ -79,7 +79,7 @@ void DtoDeleteMemory(Loc& loc, LLValue* ptr)
     // get runtime function
     llvm::Function* fn = LLVM_D_GetRuntimeFunction(loc, gIR->module, "_d_delmemory");
     // build args
-    LLValue* arg[] = { DtoBitCast(ptr, getVoidPtrType(), ".tmp") };
+    LLValue* arg[] = { DtoBitCast(ptr, getPtrToType(getVoidPtrType()), ".tmp") };
     // call
     gIR->CreateCallOrInvoke(fn, arg);
 }
@@ -136,9 +136,7 @@ void DtoDeleteArray(Loc& loc, DValue* arr)
 llvm::AllocaInst* DtoAlloca(Type* type, const char* name)
 {
     LLType* lltype = i1ToI8(DtoType(type));
-    llvm::AllocaInst* ai = new llvm::AllocaInst(lltype, name, gIR->topallocapoint());
-    ai->setAlignment(type->alignsize());
-    return ai;
+    return DtoRawAlloca(lltype, type->alignsize(), name);
 }
 
 llvm::AllocaInst* DtoArrayAlloca(Type* type, unsigned arraysize, const char* name)
