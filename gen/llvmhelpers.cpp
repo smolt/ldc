@@ -1906,7 +1906,7 @@ llvm::GlobalVariable* getOrCreateGlobal(Loc& loc, llvm::Module& module,
                 p ? p : "",
                 prettyName ? prettyName : name.str().c_str(),
                 global.params.disableTls ? " (but TLS is disabled)" : "");
-        if (p) mem.free(p);
+        if (p) mem.xfree(p);
     }
 
     // disable thread locals if requested.  This is useful if target
