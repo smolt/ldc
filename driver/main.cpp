@@ -1023,7 +1023,7 @@ int main(int argc, char **argv)
         llvm::Triple triple = llvm::Triple(gTargetMachine->getTargetTriple());
         global.params.targetTriple = triple;
         global.params.isLinux      = triple.getOS() == llvm::Triple::Linux;
-        global.params.isOSX        = triple.isMacOSX();
+        global.params.isOSX        = triple.isOSDarwin(); // MacOS, iOS are OSX
         global.params.isWindows    = triple.isOSWindows();
         global.params.isFreeBSD    = triple.getOS() == llvm::Triple::FreeBSD;
         global.params.isOpenBSD    = triple.getOS() == llvm::Triple::OpenBSD;
@@ -1057,6 +1057,29 @@ int main(int argc, char **argv)
     }
 
     // Initialization
+#if USE_OSX_TARGET_REAL
+    // TODO: could make abi specify size of real.  For now, decided here for
+    // assuming OSX.
+    switch (global.params.targetTriple.getArch())
+    {
+    case llvm::Triple::x86:
+    case llvm::Triple::x86_64:
+        Real::init(false);
+        break;
+    case llvm::Triple::arm:
+    case llvm::Triple::armeb:
+    case llvm::Triple::thumb:
+    case llvm::Triple::thumbeb:
+        Real::init(true);
+        break;
+    default:
+        error(Loc(), "cross compiling for '%s' not yet supported",
+              global.params.targetTriple.str().c_str());
+        fatal();
+        break;
+    }
+
+#endif
     Type::init();
     Id::initialize();
     Module::init();
