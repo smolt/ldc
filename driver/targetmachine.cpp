@@ -73,16 +73,7 @@ static std::string getTargetCPU(const std::string &cpu,
     const llvm::Triple &triple)
 {
     if (!cpu.empty())
-    {
-        if (cpu != "native")
-            return cpu;
-
-        // FIXME: Reject attempts to use -mcpu=native unless the target matches
-        // the host.
-        std::string hostCPU = llvm::sys::getHostCPUName();
-        if (!hostCPU.empty() && hostCPU != "generic")
-            return hostCPU;
-    }
+        return cpu;
 
     switch (triple.getArch())
     {
@@ -126,6 +117,30 @@ static const char *getLLVMArchSuffixForARM(llvm::StringRef CPU)
         .Case("cortex-a53", "v8")
         .Case("krait", "v7")
         .Default("");
+}
+
+static void convertiOSTriple(llvm::Triple& triple, const std::string& cpu)
+{
+    // Need to convert armv7, etc to thumbv7.
+    // See clang Darwin::ComputeEffectiveClangTriple which calls
+    // ToolChain::ComputeLLVMTriple to see how triple is translated based on
+    // arch.
+    switch (triple.getArch())
+    {
+    default:
+        break;
+    case llvm::Triple::arm:
+    case llvm::Triple::thumb: {
+        llvm::StringRef suffix =
+            getLLVMArchSuffixForARM(getTargetCPU(cpu, triple));
+        if (suffix.startswith("v6m") || suffix.startswith("v7m") ||
+            suffix.startswith("v7em") ||
+            (suffix.startswith("v7") && triple.isOSBinFormatMachO()))
+        {
+            triple.setArchName("thumb" + suffix.str());
+        }
+    }
+    }
 }
 
 static FloatABI::Type getARMFloatABI(const llvm::Triple &triple,
@@ -264,7 +279,24 @@ const llvm::Target *lookupTarget(const std::string &arch, llvm::Triple &triple,
     return target;
 }
 
+std::string ldc::getDefaultTriple()
+{
+    // Default triple if nothing else specified.
+    //
+    // llvm configure --target doesn't accept ios for the operating system
+    // like i386-apple-ios.  Can specify i386-apple-darwin, but that is
+    // assumed to be macosx.  Clang handles this by also looking at
+    // -mios_simulator_version_min or -miphoneos_version_min to decide on the
+    // OS.  We handle it by making our own default.
+#ifdef IPHONEOS_DEFAULT_TRIPLE
+    return "i386-apple-ios";
+#else
+    return llvm::sys::getDefaultTargetTriple();
+#endif
+}
+
 llvm::TargetMachine* createTargetMachine(
+    std::string iosArch,                     // if set, targetTriple and arch not
     std::string targetTriple,
     std::string arch,
     std::string cpu,
@@ -277,19 +309,33 @@ llvm::TargetMachine* createTargetMachine(
     bool noFramePointerElim,
     bool noLinkerStripDead)
 {
+    if (!cpu.empty() && cpu == "native")
+    {
+        // FIXME: Reject attempts to use -mcpu=native unless the target matches
+        // the host.
+        std::string hostCPU = llvm::sys::getHostCPUName();
+        if (!hostCPU.empty() && hostCPU != "generic")
+            cpu = hostCPU;
+    }
+
     // Determine target triple. If the user didn't explicitly specify one, use
     // the one set at LLVM configure time.
     llvm::Triple triple;
     if (targetTriple.empty())
     {
-        triple = llvm::Triple(llvm::sys::getDefaultTargetTriple());
+        triple = llvm::Triple(ldc::getDefaultTriple());
 
+        if (!iosArch.empty())
+        {
+            triple.setArchName(iosArch);
+            convertiOSTriple(triple, cpu);
+        }
         // Handle -m32/-m64.
-        if (sizeof(void*) == 4 && bitness == ExplicitBitness::M64)
+        else if (bitness == ExplicitBitness::M64)
         {
             triple = triple.get64BitArchVariant();
         }
-        else if (sizeof(void*) == 8 && bitness == ExplicitBitness::M32)
+        else if (bitness == ExplicitBitness::M32)
         {
             triple = triple.get32BitArchVariant();
         }

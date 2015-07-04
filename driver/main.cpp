@@ -125,8 +125,7 @@ void printVersion() {
     printf("  compiled with address sanitizer enabled\n");
 #endif
 #endif
-    printf("  Default target: %s\n", llvm::sys::getDefaultTargetTriple().c_str());
-    printf("  Real size: %lu\n", sizeof(longdouble));
+    printf("  Default target: %s\n", ldc::getDefaultTriple().c_str());
     std::string CPU = llvm::sys::getHostCPUName();
     if (CPU == "generic") CPU = "(unknown)";
     printf("  Host CPU: %s\n", CPU.c_str());
@@ -963,6 +962,15 @@ static void emitEntryPointInto(llvm::Module* lm)
 #endif
 }
 
+static bool validiOSArch(const std::string &iosArch)
+{
+    return (iosArch == "i386" ||
+            //iosArch == "x86_64" ||
+            iosArch == "armv6" ||
+            iosArch == "armv7" ||
+            iosArch == "armv7s");
+            //iosArch == "arm64");
+}
 
 int main(int argc, char **argv)
 {
@@ -998,9 +1006,21 @@ int main(int argc, char **argv)
         fatal();
 
     // Set up the TargetMachine.
+    if (!iosArch.empty())
+    {
+#ifndef IPHONEOS_DEFAULT_TRIPLE
+        error(Loc(), "-arch only available when default target is iOS");
+#endif
+        if (!validiOSArch(iosArch))
+            error(Loc(), "-arch %s is not available for iOS", iosArch.c_str());
+
+        if (!mArch.empty() || !mTargetTriple.empty())
+            error(Loc(), "-arch switch cannot be used with -march and -mtriple switches");
+    }
+
     ExplicitBitness::Type bitness = ExplicitBitness::None;
-    if ((m32bits || m64bits) && (!mArch.empty() || !mTargetTriple.empty()))
-        error(Loc(), "-m32 and -m64 switches cannot be used together with -march and -mtriple switches");
+    if ((m32bits || m64bits) && (!iosArch.empty() || !mArch.empty() || !mTargetTriple.empty()))
+        error(Loc(), "-m32 and -m64 switches cannot be used together with -arch, -march, and -mtriple switches");
 
     if (m32bits)
         bitness = ExplicitBitness::M32;
@@ -1015,7 +1035,7 @@ int main(int argc, char **argv)
     if (global.errors)
         fatal();
 
-    gTargetMachine = createTargetMachine(mTargetTriple, mArch, mCPU, mAttrs,
+    gTargetMachine = createTargetMachine(iosArch, mTargetTriple, mArch, mCPU, mAttrs,
         bitness, mFloatABI, mRelocModel, mCodeModel, codeGenOptLevel(),
         global.params.symdebug || disableFpElim, disableLinkerStripDead);
 
