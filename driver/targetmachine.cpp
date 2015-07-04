@@ -364,6 +364,24 @@ llvm::TargetMachine* createTargetMachine(
     for (unsigned i = 0; i < attrs.size(); ++i)
         features.AddFeature(attrs[i]);
 
+    // neon instructions sometimes misaligned so disable when optimizing.  Not
+    // sure of exact conditions but happens with llvm 3.5.1 with optimization
+    // turned on for thumb.  Check this out again to see if it still applies
+    // with llvm 3.6
+    if (triple.isiOS() &&
+        triple.getArch() == llvm::Triple::thumb &&
+        codeGenOptLevel != llvm::CodeGenOpt::None)
+    {
+        // -neon, unless explicity specified
+        bool neonAttr = false;
+        for (unsigned i = 0; i < attrs.size() && !neonAttr; ++i)
+            if (attrs[i].find("neon") != std::string::npos)
+                neonAttr = true;
+
+        if (!neonAttr)
+            features.AddFeature("-neon");
+    }
+
     // With an empty CPU string, LLVM will default to the host CPU, which is
     // usually not what we want (expected behavior from other compilers is
     // to default to "generic").
