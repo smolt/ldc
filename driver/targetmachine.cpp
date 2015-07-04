@@ -62,40 +62,9 @@ static std::string getX86TargetCPU(const llvm::Triple &triple)
 
 static std::string getARMTargetCPU(const llvm::Triple &triple)
 {
-    const char *result = llvm::StringSwitch<const char *>(triple.getArchName())
-        .Cases("armv2", "armv2a","arm2")
-        .Case("armv3", "arm6")
-        .Case("armv3m", "arm7m")
-        .Case("armv4", "strongarm")
-        .Case("armv4t", "arm7tdmi")
-        .Cases("armv5", "armv5t", "arm10tdmi")
-        .Cases("armv5e", "armv5te", "arm1026ejs")
-        .Case("armv5tej", "arm926ej-s")
-        .Cases("armv6", "armv6k", "arm1136jf-s")
-        .Case("armv6j", "arm1136j-s")
-        .Cases("armv6z", "armv6zk", "arm1176jzf-s")
-        .Case("armv6t2", "arm1156t2-s")
-        .Cases("armv6m", "armv6-m", "cortex-m0")
-        .Cases("armv7", "armv7a", "armv7-a", "cortex-a8")
-        .Cases("armv7l", "armv7-l", "cortex-a8")
-        .Cases("armv7f", "armv7-f", "cortex-a9-mp")
-        .Cases("armv7s", "armv7-s", "swift")
-        .Cases("armv7r", "armv7-r", "cortex-r4")
-        .Cases("armv7m", "armv7-m", "cortex-m3")
-        .Cases("armv7em", "armv7e-m", "cortex-m4")
-        .Cases("armv8", "armv8a", "armv8-a", "cortex-a53")
-        .Case("ep9312", "ep9312")
-        .Case("iwmmxt", "iwmmxt")
-        .Case("xscale", "xscale")
-        // If all else failed, return the most base CPU with thumb interworking
-        // supported by LLVM.
-        .Default(0);
-
-    if (result)
-        return result;
-
-    return (triple.getEnvironment() == llvm::Triple::GNUEABIHF) ?
-        "arm1176jzf-s" : "arm7tdmi";
+    return triple.getARMCPUForArch();
+    // Note: Previous version was copy+paste from clang Tools.cpp, but was
+    // missing thumbs.
 }
 
 /// Returns the LLVM name of the target CPU to use given the provided
@@ -125,12 +94,14 @@ static std::string getTargetCPU(const std::string &cpu,
     case llvm::Triple::x86_64:
         return getX86TargetCPU(triple);
     case llvm::Triple::arm:
+    case llvm::Triple::thumb:
         return getARMTargetCPU(triple);
     }
 }
 
 static const char *getLLVMArchSuffixForARM(llvm::StringRef CPU)
 {
+    // From clang Tools.cpp
     return llvm::StringSwitch<const char *>(CPU)
         .Case("strongarm", "v4")
         .Cases("arm7tdmi", "arm7tdmi-s", "arm710t", "v4t")
@@ -387,6 +358,11 @@ llvm::TargetMachine* createTargetMachine(
     // to default to "generic").
     cpu = getTargetCPU(cpu, triple);
 
+    if (global.params.verbose)
+    {
+        fprintf(global.stdmsg,"targeting '%s' (CPU '%s' with features '%s')\n",
+                triple.str().c_str(), cpu.c_str(), features.getString().c_str());
+    }
     if (Logger::enabled())
     {
         Logger::println("Targeting '%s' (CPU '%s' with features '%s')",
@@ -415,6 +391,7 @@ llvm::TargetMachine* createTargetMachine(
     }
 
 #if LDC_LLVM_VER < 305
+    // TODO: Can make this better now we have sjlj?
     if (triple.getArch() == llvm::Triple::arm && !triple.isOSDarwin())
     {
         // On ARM, we want to use EHABI exception handling, as we don't support
