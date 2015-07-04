@@ -375,7 +375,7 @@ llvm::TargetMachine* createTargetMachine(
             triple.str().c_str(), cpu.c_str(), features.getString().c_str());
     }
 
-    if (triple.isMacOSX() && relocModel == llvm::Reloc::Default)
+    if (triple.isOSDarwin() && relocModel == llvm::Reloc::Default)
     {
         // OS X defaults to PIC (and as of 10.7.5/LLVM 3.1-3.3, TLS use leads
         // to crashes for non-PIC code). LLVM doesn't handle this.
