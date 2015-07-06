@@ -513,7 +513,7 @@ endif()
 if(IPHONEOS_ARCHS)
     # "all" is synonym for all vetted iOS archs
     if(IPHONEOS_ARCHS STREQUAL "all")
-        set(IPHONEOS_ARCHS i386 armv7)
+        set(IPHONEOS_ARCHS i386 armv7 armv7s)
     endif()
 
     macro(findsdk sdkname sdkpath)
