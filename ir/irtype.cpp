@@ -72,12 +72,16 @@ LLType* IrTypeBasic::getComplexType(llvm::LLVMContext& ctx, LLType* type)
 
 static inline llvm::Type* getReal80Type(llvm::LLVMContext& ctx)
 {
-#if !USE_REAL64
     llvm::Triple::ArchType const a = global.params.targetTriple.getArch();
     bool const anyX86 = (a == llvm::Triple::x86) || (a == llvm::Triple::x86_64);
 
     // only x86 has 80bit float - but no support with MS C Runtime!
     if (anyX86 &&
+#if USE_OSX_TARGET_REAL
+        // Note: This is here for completeness but only makes sense if
+        // libc/libm are also compiled for double precision.
+        !Real::useReal64() &&
+#endif
 #if LDC_LLVM_VER >= 305
         !global.params.targetTriple.isWindowsMSVCEnvironment()
 #else
@@ -86,7 +90,6 @@ static inline llvm::Type* getReal80Type(llvm::LLVMContext& ctx)
         )
 
         return llvm::Type::getX86_FP80Ty(ctx);
-#endif
 
     return llvm::Type::getDoubleTy(ctx);
 }

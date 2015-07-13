@@ -288,9 +288,16 @@ cl::opt<std::string> moduleDepsFile("deps",
     cl::desc("Write module dependencies to filename"),
     cl::value_desc("filename"));
 
+// Provide a clang-like "-arch" for iOS targets.  It is used by the OS X based
+// tools to specify just the <arch><sub> part of the triple
+// <arch><sub>-<vendor>-<sys>-<abi>.  This differs from -march below that
+// implements an llc-like "-march" which selects a target name from the LLVM
+// TargetRegistery.
+cl::opt<std::string> iosArch("arch",
+    cl::desc("Specify the iOS architecture to build for (like clang -arch):"));
 
 cl::opt<std::string> mArch("march",
-    cl::desc("Architecture to generate code for:"));
+    cl::desc("Architecture to generate code for (like llc -march):"));
 
 cl::opt<bool> m32bits("m32",
     cl::desc("32 bit target"),

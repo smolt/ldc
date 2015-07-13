@@ -8,6 +8,7 @@ cmake_minimum_required(VERSION 2.6)
 
 set(DMDFE_VERSION         ${D_VERSION}.${DMDFE_MINOR_VERSION}.${DMDFE_PATCH_VERSION})
 
+set(IPHONEOS_ARCHS        ""                                        CACHE STRING  "Build libraries for these iPhoneOS architectures")
 set(MULTILIB              OFF                                       CACHE BOOL    "Build both 32/64 bit runtime libraries")
 set(BUILD_BC_LIBS         OFF                                       CACHE BOOL    "Build the runtime as LLVM bitcode libraries")
 set(INCLUDE_INSTALL_DIR   ${CMAKE_INSTALL_PREFIX}/include/d         CACHE PATH    "Path to install D modules to")
@@ -507,7 +508,78 @@ if(BUILD_SHARED_LIBS)
 else()
     set(OSX_LIBEXT "a")
 endif()
-if(MULTILIB)
+
+if(IPHONEOS_ARCHS)
+    # "all" is synonym for all vetted iOS archs
+    if(IPHONEOS_ARCHS STREQUAL "all")
+        set(IPHONEOS_ARCHS i386 armv7 armv7s)
+    endif()
+
+    macro(findsdk sdkname sdkpath)
+        execute_process(COMMAND xcrun --sdk ${sdkname} --show-sdk-path
+                        RESULT_VARIABLE exitcode
+                        OUTPUT_VARIABLE ${sdkpath}
+                        OUTPUT_STRIP_TRAILING_WHITESPACE)
+        if(NOT exitcode EQUAL 0)
+            message(FATAL_ERROR "Can't find SDK '${sdkname}'")
+        endif()
+    endmacro()
+
+    findsdk(iphoneos dev_sdk)
+    findsdk(iphonesimulator sim_sdk)
+    set(dev_cflags "-isysroot ${dev_sdk} -miphoneos-version-min=5.1")
+    set(sim_cflags "-isysroot ${sim_sdk} -mios-simulator-version-min=5.1")
+    set(archlibs)
+    list(LENGTH IPHONEOS_ARCHS numarchs)
+
+    foreach(arch ${IPHONEOS_ARCHS})
+        if(numarchs EQUAL 1)
+            set(libsuffix)
+        else()
+            set(libsuffix ${arch})
+        endif()
+        if(arch MATCHES "armv6|armv7|armv7s|arm64")
+            # Need WIP_FloatPrecIssue for some math unittests
+            build_runtime_variants("-arch;${arch};-d-version=WIP_FloatPrecIssue"
+                                   "-arch ${arch} ${dev_cflags} ${RT_CFLAGS}"
+                                   "-arch ${arch} ${dev_cflags} ${LD_FLAGS}"
+                                   "${libsuffix}" archlibs)
+        elseif(arch MATCHES "i386|x86_64")
+            build_runtime_variants("-arch;${arch}"
+                                   "-arch ${arch} ${sim_cflags} ${RT_CFLAGS}"
+                                   "-arch ${arch} ${sim_cflags} ${LD_FLAGS}"
+                                   "${libsuffix}" archlibs)
+        else()
+            message(FATAL_ERROR "Unknown arch '${arch}'")
+        endif()
+
+        # first time through, harvest name of universal lib
+        if(NOT LIBS_TO_INSTALL)
+            string(REPLACE "_${arch}" "" LIBS_TO_INSTALL "${archlibs}")
+        endif()
+    endforeach()
+
+    # maybe want to copy when numarch is 1 to prevent rebuilding libs
+    # when working on one arch at a time.
+    if(numarchs GREATER 1)
+        foreach(lib ${LIBS_TO_INSTALL})
+            set(depends)
+            set(libarchs)
+            foreach(arch ${IPHONEOS_ARCHS})
+                list(APPEND depends "${lib}_${arch}")
+                list(APPEND libarchs
+                     ${CMAKE_BINARY_DIR}/lib${arch}/lib${lib}.${OSX_LIBEXT})
+            endforeach()
+            add_custom_command(
+                OUTPUT ${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}/lib${lib}.${OSX_LIBEXT}
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}
+                COMMAND "lipo"
+                ARGS ${libarchs} -create -output ${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}/lib${lib}.${OSX_LIBEXT}
+                DEPENDS ${depends})
+            add_custom_target(${lib} ALL DEPENDS ${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}/lib${lib}.${OSX_LIBEXT})
+        endforeach()
+    endif()
+elseif(MULTILIB)
     if(APPLE)
         # On OS X, build a "fat" library.
 

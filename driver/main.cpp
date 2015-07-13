@@ -120,8 +120,7 @@ void printVersion() {
     printf("  compiled with address sanitizer enabled\n");
 #endif
 #endif
-    printf("  Default target: %s\n", llvm::sys::getDefaultTargetTriple().c_str());
-    printf("  Real size: %lu\n", sizeof(longdouble));
+    printf("  Default target: %s\n", ldc::getDefaultTriple().c_str());
     std::string CPU = llvm::sys::getHostCPUName();
     if (CPU == "generic") CPU = "(unknown)";
     printf("  Host CPU: %s\n", CPU.c_str());
@@ -920,6 +919,15 @@ static void emitJson(Modules &modules)
     }
 }
 
+static bool validiOSArch(const std::string &iosArch)
+{
+    return (iosArch == "i386" ||
+            //iosArch == "x86_64" ||
+            iosArch == "armv6" ||
+            iosArch == "armv7" ||
+            iosArch == "armv7s");
+            //iosArch == "arm64");
+}
 
 int main(int argc, char **argv)
 {
@@ -955,9 +963,21 @@ int main(int argc, char **argv)
         fatal();
 
     // Set up the TargetMachine.
+    if (!iosArch.empty())
+    {
+#ifndef IPHONEOS_DEFAULT_TRIPLE
+        error(Loc(), "-arch only available when default target is iOS");
+#endif
+        if (!validiOSArch(iosArch))
+            error(Loc(), "-arch %s is not available for iOS", iosArch.c_str());
+
+        if (!mArch.empty() || !mTargetTriple.empty())
+            error(Loc(), "-arch switch cannot be used with -march and -mtriple switches");
+    }
+
     ExplicitBitness::Type bitness = ExplicitBitness::None;
-    if ((m32bits || m64bits) && (!mArch.empty() || !mTargetTriple.empty()))
-        error(Loc(), "-m32 and -m64 switches cannot be used together with -march and -mtriple switches");
+    if ((m32bits || m64bits) && (!iosArch.empty() || !mArch.empty() || !mTargetTriple.empty()))
+        error(Loc(), "-m32 and -m64 switches cannot be used together with -arch, -march, and -mtriple switches");
 
     if (m32bits)
         bitness = ExplicitBitness::M32;
@@ -971,7 +991,7 @@ int main(int argc, char **argv)
     if (global.errors)
         fatal();
 
-    gTargetMachine = createTargetMachine(mTargetTriple, mArch, mCPU, mAttrs,
+    gTargetMachine = createTargetMachine(iosArch, mTargetTriple, mArch, mCPU, mAttrs,
         bitness, mFloatABI, mRelocModel, mCodeModel, codeGenOptLevel(),
         global.params.symdebug || disableFpElim, disableLinkerStripDead);
 
@@ -989,7 +1009,7 @@ int main(int argc, char **argv)
         llvm::Triple triple = llvm::Triple(gTargetMachine->getTargetTriple());
         global.params.targetTriple = triple;
         global.params.isLinux      = triple.getOS() == llvm::Triple::Linux;
-        global.params.isOSX        = triple.isMacOSX();
+        global.params.isOSX        = triple.isOSDarwin(); // MacOS, iOS are OSX
         global.params.isWindows    = triple.isOSWindows();
         global.params.isFreeBSD    = triple.getOS() == llvm::Triple::FreeBSD;
         global.params.isOpenBSD    = triple.getOS() == llvm::Triple::OpenBSD;
@@ -1014,6 +1034,29 @@ int main(int argc, char **argv)
     }
 
     // Initialization
+#if USE_OSX_TARGET_REAL
+    // TODO: could make abi specify size of real.  For now, decided here for
+    // assuming OSX.
+    switch (global.params.targetTriple.getArch())
+    {
+    case llvm::Triple::x86:
+    case llvm::Triple::x86_64:
+        Real::init(false);
+        break;
+    case llvm::Triple::arm:
+    case llvm::Triple::armeb:
+    case llvm::Triple::thumb:
+    case llvm::Triple::thumbeb:
+        Real::init(true);
+        break;
+    default:
+        error(Loc(), "cross compiling for '%s' not yet supported",
+              global.params.targetTriple.str().c_str());
+        fatal();
+        break;
+    }
+
+#endif
     Type::init();
     Id::initialize();
     Module::init();

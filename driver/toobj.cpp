@@ -128,7 +128,6 @@ static void codegenModule(llvm::TargetMachine &Target, llvm::Module& m,
             fout,
 #endif
             fileType, codeGenOptLevel()))
->>>>>>> release-0.15.2
         llvm_unreachable("no support for asm output");
 
     Passes.run(m);
