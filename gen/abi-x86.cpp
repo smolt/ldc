@@ -30,7 +30,7 @@ struct X86TargetABI : TargetABI
     {
     }
 
-    llvm::CallingConv::ID callingConv(LINK l)
+    llvm::CallingConv::ID callingConv(llvm::FunctionType* ft, LINK l)
     {
         switch (l)
         {
@@ -41,7 +41,7 @@ struct X86TargetABI : TargetABI
         case LINKdefault:
         case LINKpascal:
         case LINKwindows:
-            return llvm::CallingConv::X86_StdCall;
+            return ft->isVarArg() ? llvm::CallingConv::C : llvm::CallingConv::X86_StdCall;
         default:
             llvm_unreachable("Unhandled D linkage type.");
         }
