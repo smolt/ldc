@@ -482,6 +482,41 @@ macro(build_runtime_variants d_flags c_flags ld_flags path_suffix outlist_target
     )
 endmacro()
 
+macro(build_runtime_and_tests d_flags c_flags ld_flags path_suffix outlist_targets outlist_test_targets)
+    build_runtime(
+        "${d_flags};${D_FLAGS};${D_FLAGS_RELEASE}"
+        "${c_flags} ${TARGET_C_FLAGS}"
+        "${ld_flags}"
+        ""
+        "${path_suffix}"
+        ${outlist_targets}
+    )
+    build_runtime(
+        "${d_flags};${D_FLAGS};${D_FLAGS_DEBUG}"
+        "${c_flags} ${TARGET_C_FLAGS}"
+        "${ld_flags}"
+        "-debug"
+        "${path_suffix}"
+        ${outlist_targets}
+    )
+    build_runtime(
+        "${d_flags};${D_FLAGS};${D_FLAGS_RELEASE};-unittest"
+        "${c_flags} ${TARGET_C_FLAGS}"
+        "${ld_flags}"
+        "-unittest"
+        "${path_suffix}"
+        ${outlist_test_targets}
+    )
+    build_runtime(
+        "${d_flags};${D_FLAGS};${D_FLAGS_DEBUG};-unittest"
+        "${c_flags} ${TARGET_C_FLAGS}"
+        "${ld_flags}"
+        "-unittest-debug"
+        "${path_suffix}"
+        ${outlist_test_targets}
+    )
+endmacro()
+
 #
 # Set up build targets.
 #
@@ -529,7 +564,9 @@ if(IPHONEOS_ARCHS)
     findsdk(iphonesimulator sim_sdk)
     set(dev_cflags "-isysroot ${dev_sdk} -miphoneos-version-min=5.1")
     set(sim_cflags "-isysroot ${sim_sdk} -mios-simulator-version-min=5.1")
-    set(archlibs)
+    set(libs)
+    set(testlibs)
+    set(unilibs)
     list(LENGTH IPHONEOS_ARCHS numarchs)
 
     foreach(arch ${IPHONEOS_ARCHS})
@@ -540,29 +577,37 @@ if(IPHONEOS_ARCHS)
         endif()
         if(arch MATCHES "armv6|armv7|armv7s|arm64")
             # Need WIP_FloatPrecIssue for some math unittests
-            build_runtime_variants("-arch;${arch};-d-version=WIP_FloatPrecIssue"
-                                   "-arch ${arch} ${dev_cflags} ${RT_CFLAGS}"
-                                   "-arch ${arch} ${dev_cflags} ${LD_FLAGS}"
-                                   "${libsuffix}" archlibs)
+            build_runtime_and_tests("-arch;${arch};-d-version=WIP_FloatPrecIssue"
+              "-arch ${arch} ${dev_cflags} ${RT_CFLAGS}"
+              "-arch ${arch} ${dev_cflags} ${LD_FLAGS}"
+              "${libsuffix}" libs testlibs)
         elseif(arch MATCHES "i386|x86_64")
-            build_runtime_variants("-arch;${arch}"
-                                   "-arch ${arch} ${sim_cflags} ${RT_CFLAGS}"
-                                   "-arch ${arch} ${sim_cflags} ${LD_FLAGS}"
-                                   "${libsuffix}" archlibs)
+            build_runtime_and_tests("-arch;${arch}"
+              "-arch ${arch} ${sim_cflags} ${RT_CFLAGS}"
+              "-arch ${arch} ${sim_cflags} ${LD_FLAGS}"
+              "${libsuffix}" libs testlibs)
         else()
             message(FATAL_ERROR "Unknown arch '${arch}'")
         endif()
 
         # first time through, harvest name of universal lib
-        if(NOT LIBS_TO_INSTALL)
-            string(REPLACE "_${arch}" "" LIBS_TO_INSTALL "${archlibs}")
+        if(NOT unilibs)
+            string(REPLACE "_${arch}" "" LIBS_TO_INSTALL "${libs}")
+            string(REPLACE "_${arch}" "" unilibs "${testlibs}")
+	    list(APPEND unilibs "${LIBS_TO_INSTALL}")
         endif()
     endforeach()
 
+    message("UNILIBS ${unilibs}")
+    message("LIBS_TO_INSTALL ${LIBS_TO_INSTALL}")
+    set_target_properties(${testlibs} PROPERTIES
+      EXCLUDE_FROM_ALL ON
+      EXCLUDE_FROM_DEFAULT_BUILD ON)
+    
     # maybe want to copy when numarch is 1 to prevent rebuilding libs
     # when working on one arch at a time.
     if(numarchs GREATER 1)
-        foreach(lib ${LIBS_TO_INSTALL})
+        foreach(lib ${unilibs})
             set(depends)
             set(libarchs)
             foreach(arch ${IPHONEOS_ARCHS})
@@ -576,7 +621,13 @@ if(IPHONEOS_ARCHS)
                 COMMAND "lipo"
                 ARGS ${libarchs} -create -output ${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}/lib${lib}.${OSX_LIBEXT}
                 DEPENDS ${depends})
-            add_custom_target(${lib} ALL DEPENDS ${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}/lib${lib}.${OSX_LIBEXT})
+	    if(lib MATCHES "-unittest")
+		message("not all ${lib}")
+		add_custom_target(${lib} DEPENDS ${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}/lib${lib}.${OSX_LIBEXT})
+	    else()
+		message("all ${lib}")
+		add_custom_target(${lib} ALL DEPENDS ${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}/lib${lib}.${OSX_LIBEXT})
+	    endif()
         endforeach()
     endif()
 elseif(MULTILIB)
@@ -791,13 +842,15 @@ macro(build_test_runner name_suffix d_flags c_flags)
         endif()
     endif()
 endmacro()
+
+if(NOT IPHONEOS_ARCHS)
 build_test_runner("" "${D_FLAGS_RELEASE}" "")
 build_test_runner("-debug" "${D_FLAGS_DEBUG}" "")
 if(MULTILIB AND ${HOST_BITNESS} EQUAL 64)
     build_test_runner("-32" "${D_FLAGS_RELEASE};-m32" "-m32")
     build_test_runner("-debug-32" "${D_FLAGS_DEBUG};-m32" "-m32")
 endif()
-
+endif()
 # Add the druntime/Phobos test runner invocations for all the different modules.
 
 macro(file_to_module_name file_name out_module_name)
