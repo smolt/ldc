@@ -127,7 +127,7 @@ class DIBuilder
     }
 
 public:
-    DIBuilder(IRState *const IR, llvm::Module &M);
+    DIBuilder(IRState *const IR);
 
     /// \brief Emit the Dwarf compile_unit global for a Module m.
     /// \param m        Module to emit as compile unit.
@@ -158,15 +158,19 @@ public:
     /// \brief Emits debug info for block end
     void EmitBlockEnd();
 
-    void EmitStopPoint(unsigned ln);
+    void EmitStopPoint(Loc& loc);
 
     void EmitValue(llvm::Value *val, VarDeclaration* vd);
 
     /// \brief Emits all things necessary for making debug info for a local variable vd.
     /// \param ll       LLVM Value of the variable.
     /// \param vd       Variable declaration to emit debug info for.
+    /// \param type     Type of parameter if diferent from vd->type
+    /// \param isThisPtr Parameter is hidden this pointer
     /// \param addr     An array of complex address operations.
     void EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
+        Type *type = 0,
+        bool isThisPtr = false,
 #if LDC_LLVM_VER >= 306
         llvm::ArrayRef<int64_t> addr = llvm::ArrayRef<int64_t>()
 #else
@@ -179,13 +183,13 @@ public:
     /// \param vd       Variable declaration to emit debug info for.
     DIGlobalVariable EmitGlobalVariable(llvm::GlobalVariable *ll, VarDeclaration *vd); // FIXME
 
-    void EmitModuleEnd();
+    void Finalize();
 
 private:
     llvm::LLVMContext &getContext();
     Module *getDefinedModule(Dsymbol *s);
     DIScope GetCurrentScope();
-    void Declare(llvm::Value *var, ldc::DILocalVariable divar
+    void Declare(const Loc &loc, llvm::Value *var, ldc::DILocalVariable divar
 #if LDC_LLVM_VER >= 306
         , ldc::DIExpression diexpr
 #endif

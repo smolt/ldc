@@ -228,6 +228,7 @@ file(GLOB IR_SRC ir/*.cpp)
 file(GLOB IR_HDR ir/*.h)
 set(DRV_SRC
     driver/cl_options.cpp
+    driver/codegenerator.cpp
     driver/configfile.cpp
     driver/targetmachine.cpp
     driver/toobj.cpp
@@ -239,6 +240,7 @@ set(DRV_SRC
 set(DRV_HDR
     driver/linker.h
     driver/cl_options.h
+    driver/codegenerator.h
     driver/configfile.h
     driver/ldc-version.h
     driver/targetmachine.h
@@ -325,9 +327,7 @@ if(MSVC)
     string(REGEX REPLACE "(^| ) */GR-? *( |$)" "\\1 \\2" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
     add_definitions(-D_HAS_EXCEPTIONS=0)
-    set(EXTRA_CXXFLAGS "/W0 /wd4996 /GF /GR- /EHs-c- /MP")
-else()
-    set(EXTRA_CXXFLAGS "")
+    set(EXTRA_CXXFLAGS "${EXTRA_CXXFLAGS} /GF /GR- /EHs-c- /MP")
 endif()
 
 # if llvm was built with assertions we have to do the same

@@ -410,7 +410,7 @@ public:
                 Logger::cout() << "type: " << *at << '\n';
                 Logger::cout() << "init: " << *_init << '\n';
             }
-            gvar = new llvm::GlobalVariable(*gIR->module, at, true, _linkage, _init, ".str");
+            gvar = new llvm::GlobalVariable(gIR->module, at, true, _linkage, _init, ".str");
             gvar->setUnnamedAddr(true);
             (*stringLiteralCache)[key] = gvar;
         }
@@ -2105,7 +2105,7 @@ public:
         // call assert runtime functions
         p->scope() = IRScope(assertbb, endbb);
 
-        /* DMD Bugzilla 8360: If the condition is evalated to true,
+        /* DMD Bugzilla 8360: If the condition is evaluated to true,
          * msg is not evaluated at all. So should use toElemDtor()
          * instead of toElem().
          */
@@ -2119,7 +2119,8 @@ public:
         if(
             global.params.useInvariants &&
             condty->ty == Tclass &&
-            !(static_cast<TypeClass*>(condty)->sym->isInterfaceDeclaration()))
+            !(static_cast<TypeClass*>(condty)->sym->isInterfaceDeclaration()) &&
+            !(static_cast<TypeClass*>(condty)->sym->isCPPclass()))
         {
             Logger::println("calling class invariant");
             llvm::Function* fn = LLVM_D_GetRuntimeFunction(e->loc, gIR->module,
@@ -2300,7 +2301,11 @@ public:
         IF_LOG Logger::print("HaltExp::toElem: %s\n", e->toChars());
         LOG_SCOPE;
 
+#if LDC_LLVM_VER >= 307
+        p->ir->CreateCall(GET_INTRINSIC_DECL(trap), {});
+#else
         p->ir->CreateCall(GET_INTRINSIC_DECL(trap), "");
+#endif
         p->ir->CreateUnreachable();
 
         // this terminated the basicblock, start a new one
@@ -2709,7 +2714,7 @@ public:
             {
                 llvm::Constant* init = arrayLiteralToConst(p, e);
                 llvm::GlobalVariable* global = new llvm::GlobalVariable(
-                    *gIR->module,
+                    gIR->module,
                     init->getType(),
                     true,
                     llvm::GlobalValue::InternalLinkage,
@@ -2899,7 +2904,7 @@ public:
             LLConstant* idxs[2] = { DtoConstUint(0), DtoConstUint(0) };
 
             LLConstant* initval = arrayConst(keysInits, indexType);
-            LLConstant* globalstore = new LLGlobalVariable(*gIR->module, initval->getType(),
+            LLConstant* globalstore = new LLGlobalVariable(gIR->module, initval->getType(),
                 false, LLGlobalValue::InternalLinkage, initval, ".aaKeysStorage");
 #if LDC_LLVM_VER >= 307
             LLConstant* slice = llvm::ConstantExpr::getGetElementPtr(isaPointer(globalstore)->getElementType(), globalstore, idxs, true);
@@ -2910,7 +2915,7 @@ public:
             LLValue* keysArray = DtoAggrPaint(slice, funcTy->getParamType(1));
 
             initval = arrayConst(valuesInits, vtype);
-            globalstore = new LLGlobalVariable(*gIR->module, initval->getType(),
+            globalstore = new LLGlobalVariable(gIR->module, initval->getType(),
                 false, LLGlobalValue::InternalLinkage, initval, ".aaValuesStorage");
 #if LDC_LLVM_VER >= 307
             slice = llvm::ConstantExpr::getGetElementPtr(isaPointer(globalstore)->getElementType(), globalstore, idxs, true);
@@ -3236,7 +3241,12 @@ public:
 
     virtual void visit(AssertExp *e)
     {
-        applyTo(e->e1);
+        // If assertions are turned off e.g. in release mode then
+        // the expression is ignored. Only search for destructors
+        // inside the assert expression if assertions are turned on.
+        // See GitHub issue #953.
+        if (global.params.useAssert)
+            applyTo(e->e1);
         // same as above
         // applyTo(e->msg);
     }

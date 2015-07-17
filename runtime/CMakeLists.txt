@@ -126,6 +126,7 @@ elseif(WIN32)
         list(REMOVE_ITEM LDC_D ${RUNTIME_DIR}/src/ldc/eh2.d)
     endif()
     list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/monitor.c)
+    list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/bss_section.c)
 endif()
 list(APPEND CORE_D ${CORE_D_INTERNAL} ${CORE_D_SYNC} ${CORE_D_SYS} ${CORE_D_STDC})
 list(APPEND CORE_D ${LDC_D} ${RUNTIME_DIR}/src/object_.d)
@@ -200,6 +201,11 @@ endif()
 #
 # Create configuration files.
 #
+if(MSVC)
+    set(LIB_PATH "\"-L-L${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}/${CMAKE_BUILD_TYPE}\",")
+else()
+    set(LIB_PATH "\"-L-L${CMAKE_BINARY_DIR}/lib${LIB_SUFFIX}\",")
+endif()
 
 # Add extra paths on Linux and disable linker arch mismatch warnings (like
 # DMD and GDC do). OS X doesn't need extra configuration due to the use of
@@ -227,18 +233,38 @@ add_custom_command(
     COMMAND gen_gccbuiltins ${GCCBUILTINS} "x86"
 )
 
-# Always build zlib and other C parts of the runtime in release mode, regardless
-# of what the user chose for LDC itself. We can't easily do this on MSVC builds
-# due to incompatible switches.
-if(NOT MSVC)
-    set(cfiles "${CORE_C};${DCRT_C}")
-    if(PHOBOS2_DIR)
-        list(APPEND cfiles "${ZLIB_C}")
+if(MSVC)
+    if(NOT LINK_WITH_MSVCRT)
+        set(variables
+            CMAKE_C_FLAGS_DEBUG
+            CMAKE_C_FLAGS_MINSIZEREL
+            CMAKE_C_FLAGS_RELEASE
+            CMAKE_C_FLAGS_RELWITHDEBINFO
+            CMAKE_CXX_FLAGS_DEBUG
+            CMAKE_CXX_FLAGS_MINSIZEREL
+            CMAKE_CXX_FLAGS_RELEASE
+            CMAKE_CXX_FLAGS_RELWITHDEBINFO
+        )
+        foreach(variable ${variables})
+          if(${variable} MATCHES "/MT")
+            string(REGEX REPLACE "/MT" "/MD" ${variable} "${${variable}}")
+          endif()
+        endforeach()
     endif()
-    set_source_files_properties(${cfiles} PROPERTIES
-        COMPILE_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_RELEASE}"
-    )
+    # /wd4996: suppress deprecation warnings about zlib using POSIX names
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /wd4996")
+    set(CMAKE_C_FLAGS_DEBUG "")
 endif()
+
+# Always build zlib and other C parts of the runtime in release mode, regardless
+# of what the user chose for LDC itself.
+set(cfiles "${CORE_C};${DCRT_C}")
+if(PHOBOS2_DIR)
+    list(APPEND cfiles "${ZLIB_C}")
+endif()
+set_source_files_properties(${cfiles} PROPERTIES
+    COMPILE_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_RELEASE}"
+)
 
 # Compiles the given D module into an object file, and if enabled, a bitcode
 # file. The ouput is written to a path based on output_dir. The paths of the
@@ -494,16 +520,7 @@ endmacro()
 # Set up build targets.
 #
 
-if(MSVC)
-    if (LINK_WITH_MSVCRT)
-        set(RT_CFLAGS "/MDd")
-    else()
-        set(RT_CFLAGS "/MTd")
-    endif()
-else()
-    set(RT_CFLAGS "")
-endif()
-
+set(RT_CFLAGS "")
 
 # This is a bit of a mess as we need to join the two libraries together on
 # OS X before installing them. After this has run, LIBS_TO_INSTALL contains

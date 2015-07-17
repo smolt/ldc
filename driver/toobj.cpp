@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "driver/toobj.h"
+#include "driver/targetmachine.h"
 #include "driver/tool.h"
 #include "gen/irstate.h"
 #include "gen/logger.h"
@@ -65,6 +66,10 @@ enum OpenFlags {
 }
 }
 #endif
+
+static llvm::cl::opt<bool>
+NoIntegratedAssembler("no-integrated-as", llvm::cl::Hidden,
+                      llvm::cl::desc("Disable integrated assembler"));
 
 // based on llc code, University of Illinois Open Source License
 static void codegenModule(llvm::TargetMachine &Target, llvm::Module& m,
@@ -137,10 +142,46 @@ static void assemble(const std::string &asmpath, const std::string &objpath)
     args.push_back("-o");
     args.push_back(objpath);
 
-    if (global.params.is64bit)
-        args.push_back("-m64");
-    else
-        args.push_back("-m32");
+    // Only specify -m32/-m64 for architectures where the two variants actually
+    // exist (as e.g. the GCC ARM toolchain doesn't recognize the switches).
+    // MIPS does not have -m32/-m64 but requires -mabi=.
+    if (global.params.targetTriple.get64BitArchVariant().getArch() !=
+        llvm::Triple::UnknownArch &&
+        global.params.targetTriple.get32BitArchVariant().getArch() !=
+        llvm::Triple::UnknownArch) {
+        if (global.params.targetTriple.get64BitArchVariant().getArch() ==
+            llvm::Triple::mips64 ||
+            global.params.targetTriple.get64BitArchVariant().getArch() ==
+            llvm::Triple::mips64el) {
+            switch (getMipsABI())
+            {
+                case MipsABI::EABI:
+                    args.push_back("-mabi=eabi");
+                    args.push_back("-march=mips32r2");
+                    break;
+                case MipsABI::O32:
+                    args.push_back("-mabi=32");
+                    args.push_back("-march=mips32r2");
+                    break;
+                case MipsABI::N32:
+                    args.push_back("-mabi=n32");
+                    args.push_back("-march=mips64r2");
+                    break;
+                case MipsABI::N64:
+                    args.push_back("-mabi=64");
+                    args.push_back("-march=mips64r2");
+                    break;
+                case MipsABI::Unknown:
+                    break;
+            }
+        }
+        else {
+            if (global.params.is64bit)
+                args.push_back("-m64");
+            else
+                args.push_back("-m32");
+        }
+    }
 
     // Run the compiler to assembly the program.
     std::string gcc(getGcc());
@@ -358,13 +399,15 @@ void writeModule(llvm::Module* m, std::string filename)
     // There is no integrated assembler on AIX because XCOFF is not supported.
     // Starting with LLVM 3.5 the integrated assembler can be used with MinGW.
     bool const assembleExternally = global.params.output_o &&
-        global.params.targetTriple.getOS() == llvm::Triple::AIX;
+        (NoIntegratedAssembler ||
+        global.params.targetTriple.getOS() == llvm::Triple::AIX);
 #else
     // (We require LLVM 3.5 with AIX.)
     // We don't use the integrated assembler with MinGW as it does not support
     // emitting DW2 exception handling tables.
     bool const assembleExternally = global.params.output_o &&
-        global.params.targetTriple.getOS() == llvm::Triple::MinGW32;
+        (NoIntegratedAssembler ||
+        global.params.targetTriple.getOS() == llvm::Triple::MinGW32);
 #endif
 
     // eventually do our own path stuff, dmd's is a bit strange.

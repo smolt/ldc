@@ -8,11 +8,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "gen/dibuilder.h"
+
 #include "gen/functions.h"
 #include "gen/irstate.h"
 #include "gen/llvmhelpers.h"
 #include "gen/logger.h"
 #include "gen/tollvm.h"
+#include "gen/optimizer.h"
 #include "ir/irtypeaggr.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/FileSystem.h"
@@ -24,9 +26,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #if LDC_LLVM_VER >= 307
-typedef llvm::DINode Access;
+typedef llvm::DINode DIFlags;
 #else
-typedef llvm::DIDescriptor Access;
+typedef llvm::DIDescriptor DIFlags;
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -42,7 +44,7 @@ Module *ldc::DIBuilder::getDefinedModule(Dsymbol *s)
     // array operations as well
     else if (FuncDeclaration* fd = s->isFuncDeclaration())
     {
-        if (fd->isArrayOp && !isDruntimeArrayOp(fd))
+        if (fd->isArrayOp && (willInline() || !isDruntimeArrayOp(fd)))
             return IR->dmodule;
     }
     // otherwise use the symbol's module
@@ -51,8 +53,8 @@ Module *ldc::DIBuilder::getDefinedModule(Dsymbol *s)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ldc::DIBuilder::DIBuilder(IRState *const IR, llvm::Module &M)
-    : IR(IR), DBuilder(M)
+ldc::DIBuilder::DIBuilder(IRState *const IR)
+    : IR(IR), DBuilder(IR->module), CUNode(0)
 {
 }
 
@@ -72,7 +74,7 @@ ldc::DIScope ldc::DIBuilder::GetCurrentScope()
     return fn->diLexicalBlocks.top();
 }
 
-void ldc::DIBuilder::Declare(llvm::Value *var, ldc::DILocalVariable divar
+void ldc::DIBuilder::Declare(const Loc &loc, llvm::Value *var, ldc::DILocalVariable divar
 #if LDC_LLVM_VER >= 306
     , ldc::DIExpression diexpr
 #endif
@@ -83,10 +85,12 @@ void ldc::DIBuilder::Declare(llvm::Value *var, ldc::DILocalVariable divar
         diexpr,
 #endif
 #if LDC_LLVM_VER >= 307
-        IR->ir->getCurrentDebugLocation(),
+        llvm::DebugLoc::get(loc.linnum, loc.charnum, GetCurrentScope()),
 #endif
         IR->scopebb());
-    instr->setDebugLoc(IR->ir->getCurrentDebugLocation());
+#if LDC_LLVM_VER < 307
+    instr->setDebugLoc(llvm::DebugLoc::get(loc.linnum, loc.charnum, GetCurrentScope()));
+#endif
 }
 
 ldc::DIFile ldc::DIBuilder::CreateFile(Loc& loc)
@@ -266,14 +270,14 @@ ldc::DIType ldc::DIBuilder::CreateMemberType(unsigned linnum, Type *type,
     unsigned Flags = 0;
     switch (prot) {
         case PROTprivate:
-            Flags = Access::FlagPrivate;
+            Flags = DIFlags::FlagPrivate;
             break;
         case PROTprotected:
-            Flags = Access::FlagProtected;
+            Flags = DIFlags::FlagProtected;
             break;
 #if LDC_LLVM_VER >= 306
         case PROTpublic:
-            Flags = Access::FlagPublic;
+            Flags = DIFlags::FlagPublic;
             break;
 #endif
         default:
@@ -427,7 +431,7 @@ ldc::DIType ldc::DIBuilder::CreateCompositeType(Type *type)
            getTypeBitSize(T), // size in bits
            getABITypeAlign(T)*8, // alignment in bits
            0, // offset in bits,
-           Access::FlagFwdDecl, // flags
+           DIFlags::FlagFwdDecl, // flags
            derivedFrom, // DerivedFrom
            elemsArray
         );
@@ -439,7 +443,7 @@ ldc::DIType ldc::DIBuilder::CreateCompositeType(Type *type)
            linnum, // line number where defined
            getTypeBitSize(T), // size in bits
            getABITypeAlign(T)*8, // alignment in bits
-           Access::FlagFwdDecl, // flags
+           DIFlags::FlagFwdDecl, // flags
 #if LDC_LLVM_VER >= 303
            derivedFrom, // DerivedFrom
 #endif
@@ -652,13 +656,16 @@ void ldc::DIBuilder::EmitCompileUnit(Module *m)
     Logger::println("D to dwarf compile_unit");
     LOG_SCOPE;
 
+    assert(!CUNode &&
+           "Already created compile unit for this DIBuilder instance");
+
     // prepare srcpath
     llvm::SmallString<128> srcpath(m->srcfile->name->toChars());
     llvm::sys::fs::make_absolute(srcpath);
 
 #if LDC_LLVM_VER >= 304
     // Metadata without a correct version will be stripped by UpgradeDebugInfo.
-    gIR->module->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
+    IR->module.addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
 
     CUNode =
 #endif
@@ -668,7 +675,7 @@ void ldc::DIBuilder::EmitCompileUnit(Module *m)
         llvm::sys::path::filename(srcpath),
         llvm::sys::path::parent_path(srcpath),
         "LDC (http://wiki.dlang.org/LDC)",
-        false, // isOptimized TODO
+        isOptimizationEnabled(), // isOptimized
         llvm::StringRef(), // Flags TODO
         1 // Runtime Version TODO
     );
@@ -706,10 +713,10 @@ ldc::DISubprogram ldc::DIBuilder::EmitSubProgram(FuncDeclaration *fd)
         fd->loc.linnum, // line no
         DIFnType, // type
         fd->protection == PROTprivate, // is local to unit
-        IR->dmodule == getDefinedModule(fd), // isdefinition
+        true, // isdefinition
         fd->loc.linnum, // FIXME: scope line
-        0, // Flags
-        false, // isOptimized
+        DIFlags::FlagPrototyped, // Flags
+        isOptimizationEnabled(), // isOptimized
         getIrFunc(fd)->func
     );
 }
@@ -760,7 +767,8 @@ ldc::DISubprogram ldc::DIBuilder::EmitModuleCTor(llvm::Function* Fn,
         true, // is local to unit
         true, // isdefinition
         0, // FIXME: scope line
-        false, // FIXME: isOptimized
+        DIFlags::FlagPrototyped | DIFlags::FlagArtificial,
+        isOptimizationEnabled(), // isOptimized
         Fn
     );
 }
@@ -774,7 +782,7 @@ void ldc::DIBuilder::EmitFuncStart(FuncDeclaration *fd)
     LOG_SCOPE;
 
     assert(static_cast<llvm::MDNode *>(getIrFunc(fd)->diSubprogram) != 0);
-    EmitStopPoint(fd->loc.linnum);
+    EmitStopPoint(fd->loc);
 }
 
 void ldc::DIBuilder::EmitFuncEnd(FuncDeclaration *fd)
@@ -786,6 +794,7 @@ void ldc::DIBuilder::EmitFuncEnd(FuncDeclaration *fd)
     LOG_SCOPE;
 
     assert(static_cast<llvm::MDNode *>(getIrFunc(fd)->diSubprogram) != 0);
+    EmitStopPoint(fd->endloc);
 }
 
 void ldc::DIBuilder::EmitBlockStart(Loc& loc)
@@ -800,13 +809,13 @@ void ldc::DIBuilder::EmitBlockStart(Loc& loc)
             GetCurrentScope(), // scope
             CreateFile(loc), // file
             loc.linnum, // line
-            0 // column
+            loc.charnum // column
 #if LDC_LLVM_VER == 305
             , 0 // DWARF path discriminator value
 #endif
             );
     IR->func()->diLexicalBlocks.push(block);
-    EmitStopPoint(loc.linnum);
+    EmitStopPoint(loc);
 }
 
 void ldc::DIBuilder::EmitBlockEnd()
@@ -822,15 +831,20 @@ void ldc::DIBuilder::EmitBlockEnd()
     fn->diLexicalBlocks.pop();
 }
 
-void ldc::DIBuilder::EmitStopPoint(unsigned ln)
+void ldc::DIBuilder::EmitStopPoint(Loc& loc)
 {
     if (!global.params.symdebug)
         return;
 
-    Logger::println("D to dwarf stoppoint at line %u", ln);
+    // If we already have a location set and the current loc is invalid
+    // (line 0), then we can just ignore it (see GitHub issue #998 for why we
+    // cannot do this in all cases).
+    if (!loc.linnum && !IR->ir->getCurrentDebugLocation().isUnknown())
+        return;
+
+    Logger::println("D to dwarf stoppoint at line %u, column %u", loc.linnum, loc.charnum);
     LOG_SCOPE;
-    llvm::DebugLoc loc = llvm::DebugLoc::get(ln, 0, GetCurrentScope());
-    IR->ir->SetCurrentDebugLocation(loc);
+    IR->ir->SetCurrentDebugLocation(llvm::DebugLoc::get(loc.linnum, loc.charnum, GetCurrentScope()));
 }
 
 void ldc::DIBuilder::EmitValue(llvm::Value *val, VarDeclaration *vd)
@@ -855,10 +869,11 @@ void ldc::DIBuilder::EmitValue(llvm::Value *val, VarDeclaration *vd)
 }
 
 void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
+                                       Type *type, bool isThisPtr,
 #if LDC_LLVM_VER >= 306
-                           llvm::ArrayRef<int64_t> addr
+                                       llvm::ArrayRef<int64_t> addr
 #else
-                           llvm::ArrayRef<llvm::Value *> addr
+                                       llvm::ArrayRef<llvm::Value *> addr
 #endif
                            )
 {
@@ -874,7 +889,7 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
         return; // ensure that the debug variable is created only once
 
     // get type description
-    ldc::DIType TD = CreateTypeDescription(vd->type, true);
+    ldc::DIType TD = CreateTypeDescription(type ? type : vd->type, true);
     if (static_cast<llvm::MDNode *>(TD) == 0)
         return; // unsupported
 
@@ -888,6 +903,15 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
         tag = llvm::dwarf::DW_TAG_auto_variable;
 
     ldc::DILocalVariable debugVariable;
+    unsigned Flags = 0;
+    if (isThisPtr)
+    {
+#if LDC_LLVM_VER >= 302
+        Flags |= DIFlags::FlagArtificial | DIFlags::FlagObjectPointer;
+#else
+        Flags |= DIFlags::FlagArtificial;
+#endif
+    }
 
 #if LDC_LLVM_VER < 306
     if (addr.empty()) {
@@ -899,7 +923,8 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
             CreateFile(vd->loc), // file
             vd->loc.linnum, // line num
             TD, // type
-            true // preserve
+            true, // preserve
+            Flags // flags
         );
 #if LDC_LLVM_VER < 306
     }
@@ -919,9 +944,9 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
 
     // declare
 #if LDC_LLVM_VER >= 306
-    Declare(ll, debugVariable, addr.empty() ? DBuilder.createExpression() : DBuilder.createExpression(addr));
+    Declare(vd->loc, ll, debugVariable, addr.empty() ? DBuilder.createExpression() : DBuilder.createExpression(addr));
 #else
-    Declare(ll, debugVariable);
+    Declare(vd->loc, ll, debugVariable);
 #endif
 }
 
@@ -955,7 +980,7 @@ ldc::DIGlobalVariable ldc::DIBuilder::EmitGlobalVariable(llvm::GlobalVariable *l
     );
 }
 
-void ldc::DIBuilder::EmitModuleEnd()
+void ldc::DIBuilder::Finalize()
 {
     if (!global.params.symdebug)
         return;
