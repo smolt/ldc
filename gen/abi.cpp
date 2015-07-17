@@ -208,6 +208,7 @@ TargetABI * TargetABI::getTarget()
     case llvm::Triple::ppc64le:
 #endif
         return getPPC64TargetABI(global.params.targetTriple.isArch64Bit());
+    case llvm::Triple::aarch64:
     case llvm::Triple::arm:
     case llvm::Triple::thumb:
         if (global.params.targetTriple.isiOS())

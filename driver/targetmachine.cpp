@@ -168,6 +168,7 @@ static std::string getTargetCPU(const std::string &cpu,
     case llvm::Triple::arm:
     case llvm::Triple::thumb:
         return getARMTargetCPU(triple);
+        // TODO: for AArch64?
     }
 }
 
@@ -524,6 +525,7 @@ llvm::TargetMachine* createTargetMachine(
         case llvm::Triple::thumb:
             floatABI = getARMFloatABI(triple, getLLVMArchSuffixForARM(cpu));
             break;
+            // TODO: something for AArch64?
         }
     }
 

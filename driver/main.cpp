@@ -922,11 +922,11 @@ static void emitJson(Modules &modules)
 static bool validiOSArch(const std::string &iosArch)
 {
     return (iosArch == "i386" ||
-            //iosArch == "x86_64" ||
+            iosArch == "x86_64" ||
             iosArch == "armv6" ||
             iosArch == "armv7" ||
-            iosArch == "armv7s");
-            //iosArch == "arm64");
+            iosArch == "armv7s" ||
+            iosArch == "arm64");
 }
 
 int main(int argc, char **argv)
@@ -1043,6 +1043,8 @@ int main(int argc, char **argv)
     case llvm::Triple::x86_64:
         Real::init(false);
         break;
+    case llvm::Triple::aarch64:
+    case llvm::Triple::aarch64_be:
     case llvm::Triple::arm:
     case llvm::Triple::armeb:
     case llvm::Triple::thumb:
