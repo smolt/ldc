@@ -154,6 +154,13 @@ if (UNIX AND NOT "${LLVM_LDFLAGS}" STREQUAL "")
     string(REPLACE "-l-lld " "-lld " LLVM_LDFLAGS ${LLVM_LDFLAGS})
 endif()
 
+if(IPHONEOS_ARCHS)
+    # Enable cross compile to target real
+    append("-DUSE_OSX_TARGET_REAL" DMD_CXXFLAGS LDC_CXXFLAGS)
+    # Override llvm default target triple with one for iOS
+    append("-DIPHONEOS_DEFAULT_TRIPLE" LDC_CXXFLAGS)
+endif()
+
 #
 # Run idgen and impcnvgen.
 #

@@ -118,8 +118,6 @@ static void codegenModule(llvm::TargetMachine &Target, llvm::Module& m,
 #if LDC_LLVM_VER < 307
     llvm::formatted_raw_ostream fout(out);
 #endif
-    // dano - TODO: I am curious if this should be changed
-    // as codeGenOptLevel() is an enum, not a true/false
     if (Target.addPassesToEmitFile(Passes,
 #if LDC_LLVM_VER >= 307
             out,

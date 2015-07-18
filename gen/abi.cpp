@@ -226,6 +226,9 @@ TargetABI * TargetABI::getTarget()
 #if LDC_LLVM_VER >= 305
     case llvm::Triple::aarch64_be:
 #endif
+        // TODO: really don't know on this yet
+        if (global.params.targetTriple.isiOS())
+            return getIOSTargetABI();
         return getAArch64TargetABI();
 #endif
     case llvm::Triple::arm:

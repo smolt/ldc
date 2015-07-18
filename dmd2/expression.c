@@ -2953,8 +2953,8 @@ Expression *ErrorExp::toLvalue(Scope *sc, Expression *e)
 RealExp::RealExp(Loc loc, real_t value, Type *type)
         : Expression(loc, TOKfloat64, sizeof(RealExp))
 {
-#if USE_REAL64
-    //printf("RealExp::RealExp(%g)\n", value);
+#if USE_OSX_TARGET_REAL
+    //printf("RealExp::RealExp(%Lg)\n", (long double)value);
 #else
     //printf("RealExp::RealExp(%Lg)\n", value);
 #endif
