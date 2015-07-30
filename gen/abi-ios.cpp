@@ -66,10 +66,40 @@ bool isStructSimple(TypeStruct* t)
             t->sym->isPOD() &&
             isStructIntegerLike(t));
 }
+
+struct CompositeToArray32 : ABIRewrite
+{
+    LLValue* get(Type* dty, DValue* dv)
+    {
+        Logger::println("rewriting i32 array -> as %s", dty->toChars());
+        LLValue* rval = dv->getRVal();
+        LLValue* lval = DtoRawAlloca(rval->getType(), 0);
+        DtoStore(rval, lval);
+
+        LLType* pTy = getPtrToType(DtoType(dty));
+        return DtoLoad(DtoBitCast(lval, pTy), "get-result");
+    }
+
+    LLValue* put(Type* dty, DValue* dv)
+    {
+        Logger::println("rewriting %s -> as i32 array", dty->toChars());
+        LLType* t = type(dty, nullptr);
+        return DtoLoad(DtoBitCast(dv->getRVal(), getPtrToType(t)));
+    }
+
+    LLType* type(Type* t, LLType*)
+    {
+        // An i32 array that will hold Type 't'
+        size_t sz = (t->size()+3)/4;
+        return LLArrayType::get(LLIntegerType::get(gIR->context(), 32), sz);
+    }
+};
 } // end local stuff
 
 struct IOSTargetABI : TargetABI
 {
+    CompositeToArray32 compositeToArray32;
+
     llvm::CallingConv::ID callingConv(LINK l)
     {
         switch (l)
@@ -103,11 +133,45 @@ struct IOSTargetABI : TargetABI
 
     bool passByVal(Type* t)
     {
+        // Do not use llvm byval attribute as clang does not use for C ABI.
+        // Plus there seems to be a llvm optimizer problem in the "top-down
+        // list latency scheduler" pass that reorders instructions
+        // incorrectly.
         return false;
+
+        // the codegen is horrible for arrays passed by value - tries to do
+        // copy without a loop for huge arrays.  Would be better if byval
+        // could be used, but then there is the optimizer problem.  Maybe can
+        // figure that out?
+#if 0
+        TY ty = t->toBasetype()->ty;
+        return ty == Tsarray;
+#endif
     }
 
-    void rewriteFunctionType(TypeFunction* t, IrFuncTy &fty)
+    void rewriteFunctionType(TypeFunction* tf, IrFuncTy &fty)
     {
+        // rewrite structs and arrays passed by value as llvm i32 arrays.
+        // This keeps data layout unchanged when passed in arg registers r0-r3
+        // and is necessary to match clang's C ABI for struct passing.
+        // Without out this rewrite, each field or array element is passed in
+        // own register.  For example: char[4] now all fits in r0, where
+        // before it consumed r0-r3.
+        for (IrFuncTy::ArgRIter I = fty.args.rbegin(), E = fty.args.rend(); I != E; ++I)
+        {
+            IrFuncTyArg& arg = **I;
+
+            // skip if not passing full value (e.g. sret return)
+            if (arg.byref)
+                continue;
+
+            Type* ty = arg.type->toBasetype();
+            if (ty->ty == Tstruct || ty->ty == Tsarray)
+            {
+                arg.rewrite = &compositeToArray32;
+                arg.ltype = compositeToArray32.type(arg.type, arg.ltype);
+            }
+        }
     }
 };
 
