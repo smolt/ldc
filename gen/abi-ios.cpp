@@ -96,7 +96,7 @@ struct CompositeToArray32 : ABIRewrite
 };
 } // end local stuff
 
-struct IOSTargetABI : TargetABI
+struct IOSArmTargetABI : TargetABI
 {
     CompositeToArray32 compositeToArray32;
 
@@ -144,7 +144,7 @@ struct IOSTargetABI : TargetABI
         {
             IrFuncTyArg& arg = **I;
 
-            // skip if not passing full value (e.g. sret return)
+            // skip if not passing full value
             if (arg.byref)
                 continue;
 
@@ -158,7 +158,7 @@ struct IOSTargetABI : TargetABI
     }
 };
 
-TargetABI* getIOSTargetABI()
+TargetABI* getIOSArmTargetABI()
 {
-    return new IOSTargetABI;
+    return new IOSArmTargetABI;
 }
