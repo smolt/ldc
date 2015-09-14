@@ -486,7 +486,8 @@ static void LLVM_D_BuildRuntimeModule()
     // byte[] _d_arraycatnT(TypeInfo ti, uint n, ...)
     {
         llvm::StringRef fname("_d_arraycatnT");
-        LLType *types[] = { typeInfoTy };
+        //LLType *types[] = { typeInfoTy };
+        LLType *types[] = { typeInfoTy, intTy };
         LLFunctionType* fty = llvm::FunctionType::get(voidArrayTy, types, true);
         llvm::Function::Create(fty, llvm::GlobalValue::ExternalLinkage, fname, M);
     }
