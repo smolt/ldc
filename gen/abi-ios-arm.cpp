@@ -22,7 +22,7 @@
 
 #include "gen/abi.h"
 #include "gen/abi-generic.h"
-#include "gen/abi-ios.h"
+#include "gen/abi-ios-arm.h"
 
 // local stuff
 namespace {

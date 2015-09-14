@@ -10,7 +10,7 @@
 #include "gen/abi.h"
 #include "mars.h"
 #include "gen/abi-generic.h"
-#include "gen/abi-ios.h"
+#include "gen/abi-ios-arm.h"
 #include "gen/abi-ios-arm64.h"
 #include "gen/abi-mips64.h"
 #include "gen/abi-aarch64.h"
