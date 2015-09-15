@@ -149,7 +149,11 @@ struct IOSArmTargetABI : TargetABI
                 continue;
 
             Type* ty = arg.type->toBasetype();
-            if (ty->ty == Tstruct || ty->ty == Tsarray)
+            // TODO: want to also rewrite Tsarray as i32 arrays, but sometimes
+            // llvm selects an aligned ldrd instruction even though the ptr is
+            // unaligned (e.g. walking through members of array char[5][]).
+            //if (ty->ty == Tstruct || ty->ty == Tsarray)
+            if (ty->ty == Tstruct)
             {
                 arg.rewrite = &compositeToArray32;
                 arg.ltype = compositeToArray32.type(arg.type, arg.ltype);
