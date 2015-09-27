@@ -20,6 +20,31 @@
 #include "gen/abi-ios-arm64.h"
 
 namespace {
+
+bool isHFA(TypeStruct* t)
+{
+    // Homogeneous Floating-point Aggregates consists of up to 4 of same
+    // floating point type. The ABI considers real and double the same type.
+    // It is the aggregate final layout that matters so nested structs,
+    // unions, and sarrays.  For now though, just doing the simple case of a
+    // single struct with 4 matching floating point types.  It picks up the
+    // most common cases.  TODO: finish
+
+    VarDeclarations fields = t->sym->fields;
+    if (fields.dim == 0 || fields.dim > 4) return false;
+
+    Type* ft = fields[0]->type;
+    if (!ft->isfloating()) return false;
+
+    for (size_t i = 1; i < fields.dim; ++i)
+    {
+        if (fields[0]->type->ty != ft->ty)
+            return false;
+    }
+
+    return true;
+}
+
 struct CompositeToArray64 : ABIRewrite
 {
     LLValue* get(Type* dty, DValue* dv)
@@ -47,11 +72,57 @@ struct CompositeToArray64 : ABIRewrite
         return LLArrayType::get(LLIntegerType::get(gIR->context(), 64), sz);
     }
 };
+
+/**
+ * Rewrites a composite type parameter to an integer of the same size.
+ *
+ * This is needed in order to be able to use LLVM's inreg attribute to put
+ * struct and static array parameters into registers, because the attribute has
+ * slightly different semantics. For example, LLVM would store a [4 x i8] inreg
+ * in four registers (zero-extended), instead of a single 32bit one.
+ *
+ * The LLVM value in dv is expected to be a pointer to the parameter, as
+ * generated when lowering struct/static array paramters to LLVM byval.
+ */
+struct CompositeToInt : ABIRewrite
+{
+    LLValue* get(Type* dty, DValue* dv)
+    {
+        Logger::println("rewriting integer -> %s", dty->toChars());
+        LLValue* mem = DtoAlloca(dty, ".int_to_composite");
+        LLValue* v = dv->getRVal();
+        DtoStore(v, DtoBitCast(mem, getPtrToType(v->getType())));
+        return DtoLoad(mem);
+    }
+
+    void getL(Type* dty, DValue* dv, llvm::Value* lval)
+    {
+        Logger::println("rewriting integer -> %s", dty->toChars());
+        LLValue* v = dv->getRVal();
+        DtoStore(v, DtoBitCast(lval, getPtrToType(v->getType())));
+    }
+
+    LLValue* put(Type* dty, DValue* dv)
+    {
+        Logger::println("rewriting %s -> integer", dty->toChars());
+        LLType* t = LLIntegerType::get(gIR->context(), dty->size() * 8);
+        return DtoLoad(DtoBitCast(dv->getRVal(), getPtrToType(t)));
+    }
+
+    LLType* type(Type* t, LLType*)
+    {
+        size_t sz = t->size() * 8;
+        return LLIntegerType::get(gIR->context(), sz);
+    }
+};
 } // end local stuff
 
 struct IOSArm64TargetABI : TargetABI
 {
     CompositeToArray64 compositeToArray64;
+    // IntegerRewrite doesn't do i128, so bring back CompositeToInt
+    //IntegerRewrite integerRewrite;
+    CompositeToInt compositeToInt;
 
     bool returnInArg(TypeFunction* tf)
     {
@@ -60,26 +131,43 @@ struct IOSArm64TargetABI : TargetABI
 
         // Should be same rule as passByValue for args
         Type* rt = tf->next->toBasetype();
+
         // TODO: when structs returned in registers and saved in mem, pad may
         // be undefined which cause a problem for bit comparisons.  Punt for
-        // now on C-ABI compatibity here so D internally works.
-        // Will need more work anyway for HFAs.
-        //return rt->ty == Tsarray || (rt->ty == Tstruct && rt->size() > 16);
-        return rt->ty == Tsarray || rt->ty == Tstruct;
+        // now on using C-ABI for D here.
+        if (tf->linkage == LINKd)
+            return rt->ty == Tsarray || rt->ty == Tstruct;
+
+        return rt->ty == Tsarray ||
+            (rt->ty == Tstruct && rt->size() > 16 && !isHFA((TypeStruct*)rt));
     }
 
     bool passByVal(Type* t)
     {
-        // TODO: should Tsarray be treated as a HFA or HVA (up-to 4 elements)?
+        // TODO: should Tsarray be treated as a HFA or HVA?
         t = t->toBasetype();
-        return t->ty == Tsarray || (t->ty == Tstruct && t->size() > 16);
+        return t->ty == Tsarray ||
+            (t->ty == Tstruct && t->size() > 16 && !isHFA((TypeStruct*)t));
     }
 
-    void rewriteFunctionType(TypeFunction* t, IrFuncTy &fty)
+    void rewriteFunctionType(TypeFunction* tf, IrFuncTy &fty)
     {
         // TODO: does not seem to be rewriting variadic struct args
-        // TODO:clang does a rewrite to an i64 or i128 type
-        // we could to, or do as a i64 array
+
+        if (tf->linkage != LINKd)
+        {
+            // value struct returns should be rewritten as an int type to
+            // generate correct register usage (matches clang).
+            // note: sret functions change ret type to void so this won't
+            // trigger for those
+            Type* retTy = fty.ret->type->toBasetype();
+            if (!fty.ret->byref && retTy->ty == Tstruct && !isHFA((TypeStruct*)retTy))
+            {
+                fty.ret->rewrite = &compositeToInt;
+                fty.ret->ltype = compositeToInt.type(fty.ret->type, fty.ret->ltype);
+            }
+        }
+
         for (IrFuncTy::ArgIter I = fty.args.begin(), E = fty.args.end(); I != E; ++I)
         {
             IrFuncTyArg& arg = **I;
