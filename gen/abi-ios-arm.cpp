@@ -60,8 +60,8 @@ bool isStructSimple(TypeStruct* t)
     // integer-like if its size is less than or equal to one word, and the
     // offset of each of its addressable subfields is zero. An integer-like
     // structured result is considered simple and is returned in register a1
-    // [that is r0]."  This should only applies to D "POD" structs (C
-    // compatible).
+    // [that is r0]."  Exclude non-POD structs because get failures in
+    // std.algorithm.move when struct has a ctor.
     return (t->Type::size() <= 4 &&
             t->sym->isPOD() &&
             isStructIntegerLike(t));
@@ -134,30 +134,32 @@ struct IOSArmTargetABI : TargetABI
 
     void rewriteFunctionType(TypeFunction* tf, IrFuncTy &fty)
     {
+        for (IrFuncTy::ArgRIter I = fty.args.rbegin(), E = fty.args.rend(); I != E; ++I)
+        {
+            IrFuncTyArg& arg = **I;
+            if (!arg.byref)
+                rewriteArgument(fty, arg);
+        }
+    }
+
+    void rewriteArgument(IrFuncTy& fty, IrFuncTyArg& arg)
+    {
         // rewrite structs and arrays passed by value as llvm i32 arrays.
         // This keeps data layout unchanged when passed in arg registers r0-r3
         // and is necessary to match clang's C ABI for struct passing.
         // Without out this rewrite, each field or array element is passed in
         // own register.  For example: char[4] now all fits in r0, where
         // before it consumed r0-r3.
-        for (IrFuncTy::ArgRIter I = fty.args.rbegin(), E = fty.args.rend(); I != E; ++I)
+        Type* ty = arg.type->toBasetype();
+
+        // TODO: want to also rewrite Tsarray as i32 arrays, but sometimes
+        // llvm selects an aligned ldrd instruction even though the ptr is
+        // unaligned (e.g. walking through members of array char[5][]).
+        //if (ty->ty == Tstruct || ty->ty == Tsarray)
+        if (ty->ty == Tstruct)
         {
-            IrFuncTyArg& arg = **I;
-
-            // skip if not passing full value
-            if (arg.byref)
-                continue;
-
-            Type* ty = arg.type->toBasetype();
-            // TODO: want to also rewrite Tsarray as i32 arrays, but sometimes
-            // llvm selects an aligned ldrd instruction even though the ptr is
-            // unaligned (e.g. walking through members of array char[5][]).
-            //if (ty->ty == Tstruct || ty->ty == Tsarray)
-            if (ty->ty == Tstruct)
-            {
-                arg.rewrite = &compositeToArray32;
-                arg.ltype = compositeToArray32.type(arg.type, arg.ltype);
-            }
+            arg.rewrite = &compositeToArray32;
+            arg.ltype = compositeToArray32.type(arg.type, arg.ltype);
         }
     }
 };
