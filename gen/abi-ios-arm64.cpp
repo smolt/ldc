@@ -33,17 +33,54 @@ bool isHFA(TypeStruct* t)
     VarDeclarations fields = t->sym->fields;
     if (fields.dim == 0 || fields.dim > 4) return false;
 
+    // a floating type?  Skip complex types for now
     Type* ft = fields[0]->type;
-    if (!ft->isfloating()) return false;
+    if (!ft->isfloating() || ft->iscomplex())
+        return false;
 
+    // See if all fields are same floating point size
+    d_uns64 sz = ft->size();
     for (size_t i = 1; i < fields.dim; ++i)
     {
-        if (fields[0]->type->ty != ft->ty)
+        Type* fti = fields[i]->type;
+        if (!fti->isfloating() || fti->iscomplex())
+            return false;
+        if (fti->size() != sz)
             return false;
     }
 
     return true;
 }
+
+struct CompositeToHFA : ABIRewrite
+{
+    LLValue* get(Type* dty, DValue* dv)
+    {
+        Logger::println("rewriting i64 array -> as %s", dty->toChars());
+        LLValue* rval = dv->getRVal();
+        LLValue* lval = DtoRawAlloca(rval->getType(), 0);
+        DtoStore(rval, lval);
+
+        LLType* pTy = getPtrToType(DtoType(dty));
+        return DtoLoad(DtoBitCast(lval, pTy), "get-result");
+    }
+
+    LLValue* put(Type* dty, DValue* dv)
+    {
+        Logger::println("rewriting %s -> as i64 array", dty->toChars());
+        LLType* t = type(dty, nullptr);
+        return DtoLoad(DtoBitCast(dv->getRVal(), getPtrToType(t)));
+    }
+
+    LLType* type(Type* ty, LLType*)
+    {
+        TypeStruct* t = (TypeStruct*)ty;
+        VarDeclarations fields = t->sym->fields;
+        Type* floatType = fields[0]->type;
+        LLType* elty = DtoType(floatType);
+        return LLArrayType::get(elty, fields.dim);
+    }
+};
 
 struct CompositeToArray64 : ABIRewrite
 {
@@ -120,6 +157,7 @@ struct CompositeToInt : ABIRewrite
 struct IOSArm64TargetABI : TargetABI
 {
     CompositeToArray64 compositeToArray64;
+    CompositeToHFA compositeToHFA;
     // IntegerRewrite doesn't do i128, so bring back CompositeToInt
     //IntegerRewrite integerRewrite;
     CompositeToInt compositeToInt;
@@ -152,32 +190,37 @@ struct IOSArm64TargetABI : TargetABI
 
     void rewriteFunctionType(TypeFunction* tf, IrFuncTy &fty)
     {
-        // TODO: does not seem to be rewriting variadic struct args
-
-        if (tf->linkage != LINKd)
+        // value struct returns should be rewritten as an int type to generate
+        // correct register usage.  HFA returns don't need to be rewritten
+        // however (matches clang).
+        // note: sret functions change ret type to void so
+        // this won't trigger for those
+        Type* retTy = fty.ret->type->toBasetype();
+        if (!fty.ret->byref && retTy->ty == Tstruct && !isHFA((TypeStruct*)retTy))
         {
-            // value struct returns should be rewritten as an int type to
-            // generate correct register usage (matches clang).
-            // note: sret functions change ret type to void so this won't
-            // trigger for those
-            Type* retTy = fty.ret->type->toBasetype();
-            if (!fty.ret->byref && retTy->ty == Tstruct && !isHFA((TypeStruct*)retTy))
-            {
-                fty.ret->rewrite = &compositeToInt;
-                fty.ret->ltype = compositeToInt.type(fty.ret->type, fty.ret->ltype);
-            }
+            fty.ret->rewrite = &compositeToInt;
+            fty.ret->ltype = compositeToInt.type(fty.ret->type, fty.ret->ltype);
         }
 
         for (IrFuncTy::ArgIter I = fty.args.begin(), E = fty.args.end(); I != E; ++I)
         {
             IrFuncTyArg& arg = **I;
+            if (!arg.byref)
+                rewriteArgument(fty, arg);
+        }
+    }
 
-            // skip if not passing full value
-            if (arg.byref)
-                continue;
-
-            Type* ty = arg.type->toBasetype();
-            if (ty->ty == Tstruct || ty->ty == Tsarray)
+    void rewriteArgument(IrFuncTy& fty, IrFuncTyArg& arg)
+    {
+        Type* ty = arg.type->toBasetype();
+        if (ty->ty == Tstruct || ty->ty == Tsarray)
+        {
+            if (ty->ty == Tstruct && isHFA((TypeStruct*)ty))
+            {
+                arg.rewrite = &compositeToHFA;
+                arg.ltype = compositeToHFA.type(arg.type, arg.ltype);
+            }
+            else
             {
                 arg.rewrite = &compositeToArray64;
                 arg.ltype = compositeToArray64.type(arg.type, arg.ltype);
