@@ -1,4 +1,4 @@
-//===-- abi-ios-arm64.cpp ---------------------------------------------------===//
+//===-- abi-ios-arm64.cpp -------------------------------------------------===//
 //
 //                         LDC – the LLVM D compiler
 //
@@ -21,42 +21,131 @@
 
 namespace {
 
-bool isHFA(TypeStruct* t)
+// A Homogeneous Floating-point Aggregate (HFA) consists of up to 4 of same
+// floating point type (all float or all double). The iOS C-ABI considers real
+// (long double) same as double.  Also consider D floats of same size as same
+// float type (e.g. ifloat and float are same).  It is the aggregate final
+// data layout that matters so nested structs, unions, and sarrays can result
+// in an HFA.
+//
+// simple HFAs: struct F1 {float f;}  struct D4 {double a,b,c,d;}
+// interesting HFA: struct {F1[2] vals; float weight;}
+
+bool isNestedHFA(const TypeStruct* t, d_uns64& floatSize, int& num, uinteger_t adim)
 {
-    // Homogeneous Floating-point Aggregates consists of up to 4 of same
-    // floating point type. The ABI considers real and double the same type.
-    // It is the aggregate final layout that matters so nested structs,
-    // unions, and sarrays.  For now though, just doing the simple case of a
-    // single struct with 4 matching floating point types.  It picks up the
-    // most common cases.  TODO: finish
+    // Used internally by isHFA().
 
+    // Return true if struct 't' is part of an HFA where 'floatSize' is sizeof
+    // the float and 'num' is number of these floats so far.  On return, 'num'
+    // is updated to the total number of floats in the HFA.  Set 'floatSize'
+    // to 0 discover the sizeof the float.  When struct 't' is part of an
+    // sarray, 'adim' is the dimension of that array, otherwise it is 1.
     VarDeclarations fields = t->sym->fields;
-    if (fields.dim == 0 || fields.dim > 4) return false;
 
-    // a floating type?  Skip complex types for now
-    Type* ft = fields[0]->type;
-    if (!ft->isfloating() || ft->iscomplex())
+    // HFA can't contains an empty struct
+    if (fields.dim == 0)
         return false;
 
-    // See if all fields are same floating point size
-    d_uns64 sz = ft->size();
-    for (size_t i = 1; i < fields.dim; ++i)
+    // Accumulate number of floats in HFA
+    int n;
+
+    // For unions, need to find field with most floats
+    int maxn = num;
+
+    for (size_t i = 0; i < fields.dim; ++i)
     {
-        Type* fti = fields[i]->type;
-        if (!fti->isfloating() || fti->iscomplex())
-            return false;
-        if (fti->size() != sz)
-            return false;
+        Type* field = fields[i]->type;
+
+        // reset to initial num floats (all union fields are at offset 0)
+        if (fields[i]->offset == 0)
+            n = num;
+
+        // reset dim to dimension of sarray we are in (will be 1 if not)
+        uinteger_t dim = adim;
+
+        // Field is an array.  Process the arrayof type and multiply dim by
+        // array dim.  Note that empty arrays immediately exclude this struct
+        // from HFA status.
+        if (field->ty == Tsarray)
+        {
+            TypeSArray* array = (TypeSArray*)field;
+            if (array->dim->toUInteger() == 0)
+                return false;
+            field = array->nextOf();
+            dim *= array->dim->toUInteger();
+        }
+
+        if (field->ty == Tstruct)
+        {
+            if (!isNestedHFA((TypeStruct*)field, floatSize, n, dim))
+                return false;
+        }
+        else if (field->isfloating())
+        {
+            d_uns64 sz = field->size();
+            n += dim;
+
+            if (field->iscomplex())
+            {
+                sz /= 2;                    // complex is 2 floats, adjust sz
+                n += dim;
+            }
+
+            if (floatSize == 0)             // discovered floatSize
+                floatSize = sz;
+            else if (sz != floatSize)       // different float size, reject
+                return false;
+
+            if (n > 4) return false;        // too many floats for HFA, reject
+        }
+        else
+        {
+            return false;                   // reject all other types
+        }
+
+        if (n > maxn) maxn = n;
     }
 
+    num = maxn;
     return true;
 }
 
-struct CompositeToHFA : ABIRewrite
+bool isHFA(TypeStruct* t, LLType** rewriteType=nullptr)
+{
+    // Check if struct 't' is an HFA.  If so, optionally produce the
+    // rewriteType: an array of floats
+    d_uns64 floatSize = 0;
+    int num = 0;
+
+    if (isNestedHFA(t, floatSize, num, 1))
+    {
+        if (rewriteType)
+        {
+            LLType* floatType = nullptr;
+            switch (floatSize)
+            {
+            case 4:
+                floatType = llvm::Type::getFloatTy(gIR->context());
+                break;
+            case 8:
+                floatType = llvm::Type::getDoubleTy(gIR->context());
+                break;
+            default:
+                llvm_unreachable("Unexpected size for float type");
+            }
+            *rewriteType = LLArrayType::get(floatType, num);
+        }
+        return true;
+    }
+    return false;
+}
+
+// Rewrite HFAs as array of float type
+struct HFAToArray : ABIRewrite
 {
     LLValue* get(Type* dty, DValue* dv)
     {
-        Logger::println("rewriting i64 array -> as %s", dty->toChars());
+        Logger::println("rewriting array -> as HFA %s", dty->toChars());
         LLValue* rval = dv->getRVal();
         LLValue* lval = DtoRawAlloca(rval->getType(), 0);
         DtoStore(rval, lval);
@@ -67,21 +156,21 @@ struct CompositeToHFA : ABIRewrite
 
     LLValue* put(Type* dty, DValue* dv)
     {
-        Logger::println("rewriting %s -> as i64 array", dty->toChars());
+        Logger::println("rewriting HFA %s -> as array", dty->toChars());
         LLType* t = type(dty, nullptr);
         return DtoLoad(DtoBitCast(dv->getRVal(), getPtrToType(t)));
     }
 
     LLType* type(Type* ty, LLType*)
     {
-        TypeStruct* t = (TypeStruct*)ty;
-        VarDeclarations fields = t->sym->fields;
-        Type* floatType = fields[0]->type;
-        LLType* elty = DtoType(floatType);
-        return LLArrayType::get(elty, fields.dim);
+        LLType* floatArrayType = nullptr;
+        if (isHFA((TypeStruct*)ty, &floatArrayType))
+            return floatArrayType;
+        llvm_unreachable("Type ty should always be an HFA");
     }
 };
 
+// Rewrite composite as array of i64
 struct CompositeToArray64 : ABIRewrite
 {
     LLValue* get(Type* dty, DValue* dv)
@@ -110,17 +199,8 @@ struct CompositeToArray64 : ABIRewrite
     }
 };
 
-/**
- * Rewrites a composite type parameter to an integer of the same size.
- *
- * This is needed in order to be able to use LLVM's inreg attribute to put
- * struct and static array parameters into registers, because the attribute has
- * slightly different semantics. For example, LLVM would store a [4 x i8] inreg
- * in four registers (zero-extended), instead of a single 32bit one.
- *
- * The LLVM value in dv is expected to be a pointer to the parameter, as
- * generated when lowering struct/static array paramters to LLVM byval.
- */
+
+// Rewrites a composite as an integer of the same size.
 struct CompositeToInt : ABIRewrite
 {
     LLValue* get(Type* dty, DValue* dv)
@@ -157,7 +237,7 @@ struct CompositeToInt : ABIRewrite
 struct IOSArm64TargetABI : TargetABI
 {
     CompositeToArray64 compositeToArray64;
-    CompositeToHFA compositeToHFA;
+    HFAToArray hfaToArray;
     // IntegerRewrite doesn't do i128, so bring back CompositeToInt
     //IntegerRewrite integerRewrite;
     CompositeToInt compositeToInt;
@@ -182,7 +262,8 @@ struct IOSArm64TargetABI : TargetABI
 
     bool passByVal(Type* t)
     {
-        // TODO: should Tsarray be treated as a HFA or HVA?
+        // TODO: Even though C-ABI doesn't deal with sarrays, should we treat
+        // same as structs?
         t = t->toBasetype();
         return t->ty == Tsarray ||
             (t->ty == Tstruct && t->size() > 16 && !isHFA((TypeStruct*)t));
@@ -190,16 +271,27 @@ struct IOSArm64TargetABI : TargetABI
 
     void rewriteFunctionType(TypeFunction* tf, IrFuncTy &fty)
     {
-        // value struct returns should be rewritten as an int type to generate
-        // correct register usage.  HFA returns don't need to be rewritten
-        // however (matches clang).
-        // note: sret functions change ret type to void so
-        // this won't trigger for those
+        // Value struct returns should be rewritten as an int type to generate
+        // correct register usage.  HFA struct returns don't normally need to
+        // be rewritten (clang does not rewrite), but D unions don't seem to
+        // match C unions when first member is not largest (maybe that is a
+        // bug?), so rewrite HFAs anyway.
+        //
+        // note: sret functions change ret type to void so this won't trigger
+        // for those
         Type* retTy = fty.ret->type->toBasetype();
-        if (!fty.ret->byref && retTy->ty == Tstruct && !isHFA((TypeStruct*)retTy))
+        if (!fty.ret->byref && retTy->ty == Tstruct)
         {
-            fty.ret->rewrite = &compositeToInt;
-            fty.ret->ltype = compositeToInt.type(fty.ret->type, fty.ret->ltype);
+            if (isHFA((TypeStruct*)retTy))
+            {
+                fty.ret->rewrite = &hfaToArray;
+                fty.ret->ltype = hfaToArray.type(fty.ret->type, fty.ret->ltype);
+            }
+            else
+            {
+                fty.ret->rewrite = &compositeToInt;
+                fty.ret->ltype = compositeToInt.type(fty.ret->type, fty.ret->ltype);
+            }
         }
 
         for (IrFuncTy::ArgIter I = fty.args.begin(), E = fty.args.end(); I != E; ++I)
@@ -217,8 +309,8 @@ struct IOSArm64TargetABI : TargetABI
         {
             if (ty->ty == Tstruct && isHFA((TypeStruct*)ty))
             {
-                arg.rewrite = &compositeToHFA;
-                arg.ltype = compositeToHFA.type(arg.type, arg.ltype);
+                arg.rewrite = &hfaToArray;
+                arg.ltype = hfaToArray.type(arg.type, arg.ltype);
             }
             else
             {
