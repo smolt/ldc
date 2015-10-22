@@ -34,9 +34,6 @@ bool isStructIntegerLike(TypeStruct* t)
     // extend to D pointer-ish types like class ref or AA), or another
     // integer-like struct.  clang's isIntegerLikeType() in TargetInfo.cpp
     // does something similar.
-    //
-    // note: no need to check size or isPOD again because those can't
-    // change.
 
     VarDeclarations fields = t->sym->fields;
     for (size_t i = 0; i < fields.dim; ++i)
@@ -60,11 +57,8 @@ bool isStructSimple(TypeStruct* t)
     // integer-like if its size is less than or equal to one word, and the
     // offset of each of its addressable subfields is zero. An integer-like
     // structured result is considered simple and is returned in register a1
-    // [that is r0]."  Exclude non-POD structs because get failures in
-    // std.algorithm.move when struct has a ctor.
-    return (t->Type::size() <= 4 &&
-            t->sym->isPOD() &&
-            isStructIntegerLike(t));
+    // [that is r0]."
+    return (t->Type::size() <= 4 && isStructIntegerLike(t));
 }
 
 struct CompositeToArray32 : ABIRewrite
@@ -108,8 +102,14 @@ struct IOSArmTargetABI : TargetABI
         // Normally return static arrays and structs in an sret arg, but need
         // to make an exception for "simple" integer-like structs to be
         // compatible with the C ABI.  APCS 10.3.3 says integer-like structs
-        // should be returned in r0.
+        // should be returned in r0.  Doesn't work for extern(D) with non-POD
+        // structs for some reason I haven't tracked down yet (failure in
+        // std.algorithm.move when struct has a ctor).
         Type* rt = tf->next->toBasetype();
+        if (tf->linkage == LINKd)
+            return rt->ty == Tstruct || rt->ty == Tsarray;
+
+        // C/C++ ABI (and others until we know better)
         return ((rt->ty == Tstruct && !isStructSimple((TypeStruct*)rt)) ||
                 rt->ty == Tsarray);
     }
