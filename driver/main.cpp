@@ -747,6 +747,7 @@ static void registerPredefinedTargetVersions() {
             VersionCondition::addPredefinedGlobalIdent("Posix");
             break;
         case llvm::Triple::IOS:
+            VersionCondition::addPredefinedGlobalIdent("iOS");
             VersionCondition::addPredefinedGlobalIdent("IPhoneOS");
             // fall through because most runtime OSX code is correct for iOS
             // This is kind of how these C macros work
@@ -756,6 +757,7 @@ static void registerPredefinedTargetVersions() {
             // TARGET_OS_MAC             1         0      0
         case llvm::Triple::Darwin:
             VersionCondition::addPredefinedGlobalIdent("OSX");
+            VersionCondition::addPredefinedGlobalIdent("Darwin");
             VersionCondition::addPredefinedGlobalIdent("darwin"); // For backwards compatibility.
             VersionCondition::addPredefinedGlobalIdent("Posix");
             break;
