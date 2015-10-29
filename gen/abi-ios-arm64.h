@@ -1,21 +1,21 @@
-//===-- gen/abi-ios.h - IPhoneOS ABI description ----------------*- C++ -*-===//
+//===-- gen/abi-ppc-64.h - PPC64 ABI description ----------------*- C++ -*-===//
 //
-//                         LDC â€“ the LLVM D compiler
+//                         LDC – the LLVM D compiler
 //
 // This file is distributed under the BSD-style LDC license. See the LICENSE
 // file for details.
 //
 //===----------------------------------------------------------------------===//
 //
-// The ABI implementation use for IPhoneOS ARM targets.
+// The ABI implementation used for iOS ARM64 (AArch64) targets.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LDC_GEN_ABI_IOS_H
-#define LDC_GEN_ABI_IOS_H
+#ifndef LDC_GEN_ABI_IOS_ARM64_H
+#define LDC_GEN_ABI_IOS_ARM64_H
 
 struct TargetABI;
 
-TargetABI* getIOSTargetABI();
+TargetABI* getIOSArm64TargetABI();
 
 #endif
