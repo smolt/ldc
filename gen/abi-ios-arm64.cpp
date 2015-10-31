@@ -243,8 +243,8 @@ struct IOSArm64TargetABI : TargetABI
 {
     CompositeToArray64 compositeToArray64;
     HFAToArray hfaToArray;
+    IntegerRewrite integerRewrite;
     // IntegerRewrite doesn't do i128, so bring back CompositeToInt
-    //IntegerRewrite integerRewrite;
     CompositeToInt compositeToInt;
 
     bool returnInArg(TypeFunction* tf)
@@ -324,6 +324,34 @@ struct IOSArm64TargetABI : TargetABI
             }
         }
     }
+
+    void rewriteVarargs(IrFuncTy& fty, std::vector<IrFuncTyArg*>& args)
+    {
+        for (unsigned i = 0; i < args.size(); ++i)
+        {
+            IrFuncTyArg& arg = *args[i];
+            if (!arg.byref) // don't rewrite ByVal arguments
+            {
+                // LLVM CallingConv::C promotes a varag float to double.
+                // extern(D) wants it to remain a float.  I am not sure if
+                // this is an LLVM bug or just behavior not encountered in C
+                // where all vararg floats are promoted to double by the
+                // frontend (backend never sees).
+                switch (arg.type->toBasetype()->ty)
+                {
+                case Tfloat32:
+                case Timaginary32:
+                    arg.rewrite = &integerRewrite;
+                    arg.ltype = integerRewrite.type(arg.type, arg.ltype);
+                    break;
+                default:
+                    rewriteArgument(fty, arg);
+                    break;
+                }
+            }
+        }
+    }
+
 };
 
 // The public getter for abi.cpp
