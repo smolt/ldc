@@ -247,11 +247,9 @@ Usage:\n\
   -vcolumns      print character (column) numbers in diagnostics\n\
   -vdmd          print the command used to invoke the underlying compiler\n\
   -version=level compile in version code >= level\n\
-  -version=ident compile in version code identified by ident\n"
-#if 0
-"  -vtls          list all variables going into thread local storage\n"
-#endif
-"  -vgc           list all gc allocations including hidden ones\n\
+  -version=ident compile in version code identified by ident\n\
+  -vtls          list all variables going into thread local storage\n\
+  -vgc           list all gc allocations including hidden ones\n\
   -verrors=num   limit the number of error messages (0 means unlimited)\n\
   -w             enable warnings\n\
   -wi            enable informational warnings\n\
@@ -963,7 +961,7 @@ void buildCommandLine(std::vector<const char*>& r, const Params& p)
     if (p.verbose) r.push_back("-v");
     if (p.vcolumns) r.push_back("-vcolumns");
     if (p.vgc) r.push_back("-vgc");
-    if (p.logTlsUse) warning("-vtls not yet supported by LDC.");
+    if (p.logTlsUse) r.push_back("-vtls");
     if (p.errorLimitSet) r.push_back(concat("-verrors=", p.errorLimit));
     if (p.warnings == Warnings::asErrors) r.push_back("-w");
     else if (p.warnings == Warnings::informational) r.push_back("-wi");

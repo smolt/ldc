@@ -153,12 +153,11 @@ void DtoDefineNakedFunction(FuncDeclaration* fd)
     std::ostringstream tmpstr;
 
     bool const isWin = global.params.targetTriple.isOSWindows();
-    bool const isOSX = (global.params.targetTriple.getOS() == llvm::Triple::Darwin ||
-        global.params.targetTriple.getOS() == llvm::Triple::MacOSX);
+    bool const isDarwin = global.params.targetTriple.isOSDarwin();
 
-    // osx is different
+    // darwin (osx and iOS - includes x86 iphonesimulator) is different
     // also mangling has an extra underscore prefixed
-    if (isOSX)
+    if (isDarwin)
     {
         std::string section = "text";
         bool weak = false;
@@ -239,7 +238,7 @@ void DtoDefineNakedFunction(FuncDeclaration* fd)
 
     // emit size after body
     // llvm does this on linux, but not on osx or Win
-    if (!(isWin || isOSX))
+    if (!(isWin || isDarwin))
     {
         asmstr << "\t.size\t" << mangle << ", .-" << mangle << std::endl << std::endl;
     }

@@ -679,13 +679,22 @@ longdouble Port::snan;
 
 static double zero = 0;
 double Port::infinity = 1 / zero;
+#if USE_OSX_TARGET_REAL
+longdouble Port::ldbl_infinity;
+#else
 longdouble Port::ldbl_infinity = 1 / zero;
+#endif
 
 double Port::dbl_max = 1.7976931348623157e308;
 double Port::dbl_min = 5e-324;
-longdouble Port::ldbl_max = LDBL_MAX;
 
-#if __i386 || __x86_64__
+#if USE_OSX_TARGET_REAL
+longdouble Port::ldbl_max;
+#else
+longdouble Port::ldbl_max = LDBL_MAX;
+#endif
+
+#if (__i386 || __x86_64__) && !USE_OSX_TARGET_REAL
 bool Port::yl2x_supported = true;
 bool Port::yl2xp1_supported = true;
 #else
@@ -698,7 +707,28 @@ struct PortInitializer
     PortInitializer();
 };
 
+#if USE_OSX_TARGET_REAL
+
+bool Real::initialized;
+bool Real::targetReal64;
+
+void Real::init(bool useReal64)
+{
+    if (!initialized)
+    {
+        // Target set, safe to use Real
+        targetReal64 = useReal64;
+        initialized = true;
+        Port::ldbl_infinity = 1 / zero;
+        Port::ldbl_max = LDBL_MAX;
+
+        static PortInitializer portinitializer;
+    }
+}
+
+#else  // !USE_OSX_TARGET_REAL
 static PortInitializer portinitializer;
+#endif
 
 PortInitializer::PortInitializer()
 {
@@ -722,7 +752,11 @@ PortInitializer::PortInitializer()
     assert(!signbit(Port::nan));
 
 #if IN_LLVM
+#if USE_OSX_TARGET_REAL
+    if (Real::useReal64())
+#else
     if (sizeof(double) == sizeof(longdouble))
+#endif
     {
         // double and longdouble are same type.
         // E.g. on ARM.
@@ -752,7 +786,11 @@ PortInitializer::PortInitializer()
     assert(!signbit(Port::ldbl_nan));
 
 #if IN_LLVM
+#if USE_OSX_TARGET_REAL
+    if (Real::useReal64())
+#else
     if (sizeof(double) == sizeof(longdouble))
+#endif
     {
         // double and longdouble are same type.
         // E.g. on ARM.
@@ -816,7 +854,9 @@ int Port::isNan(double r)
 
 int Port::isNan(longdouble r)
 {
-#if __APPLE__
+#if USE_OSX_TARGET_REAL
+    return isnan((long double)r);
+#elif __APPLE__
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1080
     return __inline_isnanl(r);
 #else
@@ -858,15 +898,28 @@ int Port::isInfinity(double r)
 #endif
 }
 
+#if USE_OSX_TARGET_REAL
+int Port::isInfinity(longdouble r)
+{
+    return isinf((long double)r);
+}
+#endif
+
 longdouble Port::sqrt(longdouble x)
 {
+#if USE_OSX_TARGET_REAL
+    return sqrtl(x);
+#else
     return ::sqrtl(x);
+#endif
 }
 
 longdouble Port::fmodl(longdouble x, longdouble y)
 {
 #if __FreeBSD__ && __FreeBSD_version < 800000 || __OpenBSD__ || __DragonFly__
     return ::fmod(x, y);        // hack for now, fix later
+#elif USE_OSX_TARGET_REAL
+    return ::fmodl((long double)x, (long double)y);
 #else
     return ::fmodl(x, y);
 #endif
@@ -877,10 +930,14 @@ int Port::fequal(longdouble x, longdouble y)
     /* In some cases, the REALPAD bytes get garbage in them,
      * so be sure and ignore them.
      */
+#if USE_OSX_TARGET_REAL
+    return x.bitsmatch(y);
+#else
     return memcmp(&x, &y, Target::realsize - Target::realpad) == 0;
+#endif
 }
 
-#if __i386 || __x86_64__
+#if (__i386 || __x86_64__) && !USE_OSX_TARGET_REAL
 void Port::yl2x_impl(longdouble* x, longdouble* y, longdouble* res)
 {
     __asm__ volatile("fyl2x": "=t" (*res): "u" (*y), "0" (*x) : "st(1)" );

@@ -60,6 +60,7 @@ namespace opts {
     extern cl::list<std::string> versions;
     extern cl::opt<std::string> moduleDepsFile;
 
+    extern cl::opt<std::string> iosArch;
     extern cl::opt<std::string> mArch;
     extern cl::opt<bool> m32bits;
     extern cl::opt<bool> m64bits;
@@ -76,6 +77,7 @@ namespace opts {
     extern cl::opt<bool, true> singleObj;
     extern cl::opt<bool> linkonceTemplates;
     extern cl::opt<bool> disableLinkerStripDead;
+    extern cl::opt<bool, true> disableTls;
 
     extern cl::opt<BoundsCheck> boundsCheck;
     extern bool nonSafeBoundsChecks;

@@ -2178,11 +2178,10 @@ namespace AsmParserx8664
             return false;
         }
 
-        // OSX and 32-bit Windows need an extra leading underscore when mangling a symbol name.
+        // darwin (OSX/iOS) and 32-bit Windows need an extra leading underscore when mangling a symbol name.
         static bool prependExtraUnderscore()
         {
-            return global.params.targetTriple.getOS() == llvm::Triple::MacOSX
-                || global.params.targetTriple.getOS() == llvm::Triple::Darwin
+            return global.params.targetTriple.isOSDarwin()
                 || ( global.params.targetTriple.isOSWindows() && global.params.targetTriple.isArch32Bit() );
         }
 
