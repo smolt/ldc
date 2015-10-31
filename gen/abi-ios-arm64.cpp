@@ -146,10 +146,8 @@ struct HFAToArray : ABIRewrite
     LLValue* get(Type* dty, LLValue* v)
     {
         Logger::println("rewriting array -> as HFA %s", dty->toChars());
-        //LLValue* rval = dv->getRVal();
-        LLValue* rval = v;
-        LLValue* lval = DtoRawAlloca(rval->getType(), 0);
-        DtoStore(rval, lval);
+        LLValue* lval = DtoRawAlloca(v->getType(), 0);
+        DtoStore(v, lval);
 
         LLType* pTy = getPtrToType(DtoType(dty));
         return DtoLoad(DtoBitCast(lval, pTy), "get-result");
@@ -178,10 +176,8 @@ struct CompositeToArray64 : ABIRewrite
     LLValue* get(Type* dty, LLValue* v)
     {
         Logger::println("rewriting i64 array -> as %s", dty->toChars());
-        //LLValue* rval = dv->getRVal();
-        LLValue* rval = v;
-        LLValue* lval = DtoRawAlloca(rval->getType(), 0);
-        DtoStore(rval, lval);
+        LLValue* lval = DtoRawAlloca(v->getType(), 0);
+        DtoStore(v, lval);
 
         LLType* pTy = getPtrToType(DtoType(dty));
         return DtoLoad(DtoBitCast(lval, pTy), "get-result");
@@ -211,7 +207,6 @@ struct CompositeToInt : ABIRewrite
     {
         Logger::println("rewriting integer -> %s", dty->toChars());
         LLValue* mem = DtoAlloca(dty, ".int_to_composite");
-        //LLValue* v = dv->getRVal();
         DtoStore(v, DtoBitCast(mem, getPtrToType(v->getType())));
         return DtoLoad(mem);
     }
@@ -219,7 +214,6 @@ struct CompositeToInt : ABIRewrite
     void getL(Type* dty, LLValue* v, LLValue* lval)
     {
         Logger::println("rewriting integer -> %s", dty->toChars());
-        //LLValue* v = dv->getRVal();
         DtoStore(v, DtoBitCast(lval, getPtrToType(v->getType())));
     }
 

@@ -66,10 +66,8 @@ struct CompositeToArray32 : ABIRewrite
     LLValue* get(Type* dty, LLValue* v)
     {
         Logger::println("rewriting i32 array -> as %s", dty->toChars());
-        //LLValue* rval = dv->getRVal();
-        LLValue* rval = v;
-        LLValue* lval = DtoRawAlloca(rval->getType(), 0);
-        DtoStore(rval, lval);
+        LLValue* lval = DtoRawAlloca(v->getType(), 0);
+        DtoStore(v, lval);
 
         LLType* pTy = getPtrToType(DtoType(dty));
         return DtoLoad(DtoBitCast(lval, pTy), "get-result");
