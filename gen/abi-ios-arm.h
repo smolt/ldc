@@ -1,4 +1,4 @@
-//===-- gen/abi-ios.h - IPhoneOS ABI description ----------------*- C++ -*-===//
+//===-- gen/abi-ios-arm.h - iOS ARM ABI description -------------*- C++ -*-===//
 //
 //                         LDC – the LLVM D compiler
 //
@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// The ABI implementation use for IPhoneOS ARM targets.
+// The ABI implementation used for iOS ARM targets.
 //
 //===----------------------------------------------------------------------===//
 
