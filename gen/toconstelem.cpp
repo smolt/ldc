@@ -130,7 +130,11 @@ public:
 
     void visit(RealExp *e)
     {
+#if USE_OSX_TARGET_REAL
+        IF_LOG Logger::print("RealExp::toConstElem: %s @ %s | %La\n", e->toChars(), e->type->toChars(), (long double)e->value);
+#else
         IF_LOG Logger::print("RealExp::toConstElem: %s @ %s | %La\n", e->toChars(), e->type->toChars(), e->value);
+#endif
         LOG_SCOPE;
         Type* t = e->type->toBasetype();
         result = DtoConstFP(t, e->value);

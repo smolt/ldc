@@ -56,6 +56,9 @@ struct Port
     static int isSignallingNan(longdouble);
 
     static int isInfinity(double);
+#if USE_OSX_TARGET_REAL
+    static int isInfinity(longdouble);
+#endif
 
     static longdouble fmodl(longdouble x, longdouble y);
     static longdouble sqrt(longdouble x);

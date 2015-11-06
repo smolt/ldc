@@ -77,6 +77,11 @@ static inline llvm::Type* getReal80Type(llvm::LLVMContext& ctx)
 
     // only x86 has 80bit float - but no support with MS C Runtime!
     if (anyX86 &&
+#if USE_OSX_TARGET_REAL
+        // Note: This is here for completeness but only makes sense if
+        // libc/libm are also compiled for double precision.
+        !Real::useReal64() &&
+#endif
 #if LDC_LLVM_VER >= 305
         !global.params.targetTriple.isWindowsMSVCEnvironment()
 #else
