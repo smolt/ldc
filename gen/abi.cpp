@@ -45,8 +45,9 @@ LLValue *ABIRewrite::getAddressOf(DValue *v) {
     return v->getRVal();
   }
 
-  if (v->isLVal())
+  if (v->isLVal()) {
     return v->getLVal();
+  }
 
   return DtoAllocaDump(v, ".getAddressOf_dump");
 }
@@ -78,8 +79,9 @@ LLValue *ABIRewrite::loadFromMemory(LLValue *address, LLType *asType,
   assert(pointerType->isPointerTy());
   LLType *pointeeType = pointerType->getPointerElementType();
 
-  if (asType == pointeeType)
+  if (asType == pointeeType) {
     return DtoLoad(address, name);
+  }
 
   if (getTypeStoreSize(asType) > getTypeAllocSize(pointeeType)) {
     // not enough allocated memory
@@ -98,10 +100,11 @@ LLValue *ABIRewrite::loadFromMemory(LLValue *address, LLType *asType,
 
 void TargetABI::rewriteVarargs(IrFuncTy &fty,
                                std::vector<IrFuncTyArg *> &args) {
-  for (unsigned i = 0; i < args.size(); ++i) {
-    IrFuncTyArg &arg = *args[i];
-    if (!arg.byref) // don't rewrite ByVal arguments
+  for (auto &Elem : args) {
+    IrFuncTyArg &arg = *Elem;
+    if (!arg.byref) { // don't rewrite ByVal arguments
       rewriteArgument(fty, arg);
+    }
   }
 }
 
@@ -137,9 +140,10 @@ Type *TargetABI::vaListType() {
 
 // Some reasonable defaults for when we don't know what ABI to use.
 struct UnknownTargetABI : TargetABI {
-  bool returnInArg(TypeFunction *tf) {
-    if (tf->isref)
+  bool returnInArg(TypeFunction *tf) override {
+    if (tf->isref) {
       return false;
+    }
 
     // Return structs and static arrays on the stack. The latter is needed
     // because otherwise LLVM tries to actually return the array in a number
@@ -149,9 +153,9 @@ struct UnknownTargetABI : TargetABI {
     return (rt->ty == Tstruct || rt->ty == Tsarray);
   }
 
-  bool passByVal(Type *t) { return t->toBasetype()->ty == Tstruct; }
+  bool passByVal(Type *t) override { return t->toBasetype()->ty == Tstruct; }
 
-  void rewriteFunctionType(TypeFunction *t, IrFuncTy &fty) {
+  void rewriteFunctionType(TypeFunction *t, IrFuncTy &fty) override {
     // why?
   }
 };
@@ -163,10 +167,11 @@ TargetABI *TargetABI::getTarget() {
   case llvm::Triple::x86:
     return getX86TargetABI();
   case llvm::Triple::x86_64:
-    if (global.params.targetTriple.isOSWindows())
+    if (global.params.targetTriple.isOSWindows()) {
       return getWin64TargetABI();
-    else
+    } else {
       return getX86_64TargetABI();
+    }
   case llvm::Triple::mips:
   case llvm::Triple::mipsel:
   case llvm::Triple::mips64:
@@ -201,14 +206,15 @@ TargetABI *TargetABI::getTarget() {
 struct IntrinsicABI : TargetABI {
   RemoveStructPadding remove_padding;
 
-  bool returnInArg(TypeFunction *tf) { return false; }
+  bool returnInArg(TypeFunction *tf) override { return false; }
 
-  bool passByVal(Type *t) { return false; }
+  bool passByVal(Type *t) override { return false; }
 
-  void rewriteArgument(IrFuncTy &fty, IrFuncTyArg &arg) {
+  void rewriteArgument(IrFuncTy &fty, IrFuncTyArg &arg) override {
     Type *ty = arg.type->toBasetype();
-    if (ty->ty != Tstruct)
+    if (ty->ty != Tstruct) {
       return;
+    }
     // TODO: Check that no unions are passed in or returned.
 
     LLType *abiTy = DtoUnpaddedStructType(arg.type);
@@ -219,7 +225,7 @@ struct IntrinsicABI : TargetABI {
     }
   }
 
-  void rewriteFunctionType(TypeFunction *tf, IrFuncTy &fty) {
+  void rewriteFunctionType(TypeFunction *tf, IrFuncTy &fty) override {
     if (!fty.arg_sret) {
       Type *rt = fty.ret->type->toBasetype();
       if (rt->ty == Tstruct) {
@@ -235,8 +241,9 @@ struct IntrinsicABI : TargetABI {
       IF_LOG Logger::cout() << "Arg: " << arg->type->toChars() << '\n';
 
       // Arguments that are in memory are of no interest to us.
-      if (arg->byref)
+      if (arg->byref) {
         continue;
+      }
 
       rewriteArgument(fty, *arg);
 
