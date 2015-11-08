@@ -24,7 +24,7 @@
 #include "ir/irfunction.h"
 #include "ir/irtype.h"
 
-//////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 IrFuncTy &DtoIrTypeFunction(DValue *fnval) {
   if (DFuncValue *dfnval = fnval->isFunc()) {
@@ -66,7 +66,7 @@ TypeFunction *DtoTypeFunction(DValue *fnval) {
   llvm_unreachable("Cannot get TypeFunction* from non lazy/function/delegate");
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 LLValue *DtoCallableValue(DValue *fn) {
   Type *type = fn->getType()->toBasetype();
@@ -87,7 +87,7 @@ LLValue *DtoCallableValue(DValue *fn) {
   llvm_unreachable("Not a callable type.");
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 LLFunctionType *DtoExtractFunctionType(LLType *type) {
   if (LLFunctionType *fty = isaFunction(type)) {
@@ -101,7 +101,7 @@ LLFunctionType *DtoExtractFunctionType(LLType *type) {
   return nullptr;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 static void addExplicitArguments(std::vector<LLValue *> &args, AttrSet &attrs,
                                  IrFuncTy &irFty, LLFunctionType *callableTy,
@@ -202,7 +202,7 @@ static void addExplicitArguments(std::vector<LLValue *> &args, AttrSet &attrs,
   }
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 static LLValue *getTypeinfoArrayArgumentForDVarArg(Expressions *arguments,
                                                    int begin) {
@@ -251,7 +251,7 @@ static LLValue *getTypeinfoArrayArgumentForDVarArg(Expressions *arguments,
   return DtoLoad(typeinfoarrayparam);
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
                             DValue *&result) {
@@ -602,7 +602,7 @@ bool DtoLowerMagicIntrinsic(IRState *p, FuncDeclaration *fndecl, CallExp *e,
   return false;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class ImplicitArgumentsBuilder {
 public:
@@ -612,9 +612,8 @@ public:
                            Type *resulttype, LLValue *retvar)
       : args(args), attrs(attrs), loc(loc), fnval(fnval),
         llCalleeType(llCalleeType), arguments(arguments),
-        resulttype(resulttype), retvar(retvar)
+        resulttype(resulttype), retvar(retvar),
         // computed:
-        ,
         calleeType(fnval->getType()), dfnval(fnval->isFunc()),
         irFty(DtoIrTypeFunction(fnval)), tf(DtoTypeFunction(fnval)),
         llArgTypesBegin(llCalleeType->param_begin()) {}
@@ -748,7 +747,7 @@ private:
   }
 };
 
-//////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 // FIXME: this function is a mess !
 
@@ -863,11 +862,11 @@ DValue *DtoCallFunction(Loc &loc, Type *resulttype, DValue *fnval,
 
   bool retValIsAlloca = false;
 
-  // Ignore ABI for intrinsics
+  // ignore ABI for intrinsics
   const bool intrinsic =
       (dfnval && dfnval->func && DtoIsIntrinsic(dfnval->func));
   if (!intrinsic && !irFty.arg_sret) {
-    // do abi specific return value fixups
+    // do ABI specific return value fixups
     if (storeReturnValueOnStack) {
       Logger::println("Storing return value to stack slot");
       LLValue *mem = DtoAlloca(returntype);
