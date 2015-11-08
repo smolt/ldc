@@ -20,38 +20,25 @@
 #include <vector>
 
 namespace ExplicitBitness {
-    enum Type {
-        None,
-        M32,
-        M64
-    };
+enum Type { None, M32, M64 };
 }
 
 namespace FloatABI {
-    enum Type {
-        Default,
-        Soft,
-        SoftFP,
-        Hard
-    };
+enum Type { Default, Soft, SoftFP, Hard };
 }
 
 namespace MipsABI {
-    enum Type {
-        Unknown,
-        O32,
-        N32,
-        N64,
-        EABI
-    };
+enum Type { Unknown, O32, N32, N64, EABI };
 }
 
 namespace ldc {
-    // Get the default triple, normally configured into LLVM
-    std::string getDefaultTriple();
+// Get the default triple, normally configured into LLVM
+std::string getDefaultTriple();
 }
 
-namespace llvm { class TargetMachine; }
+namespace llvm {
+class TargetMachine;
+}
 
 /**
  * Creates an LLVM TargetMachine suitable for the given (usually command-line)
@@ -59,20 +46,13 @@ namespace llvm { class TargetMachine; }
  *
  * Does not depend on any global state.
  */
-llvm::TargetMachine* createTargetMachine(
-    std::string iosArch,
-    std::string targetTriple,
-    std::string arch,
-    std::string cpu,
-    std::vector<std::string> attrs,
-    ExplicitBitness::Type bitness,
-    FloatABI::Type floatABI,
-    llvm::Reloc::Model relocModel,
-    llvm::CodeModel::Model codeModel,
-    llvm::CodeGenOpt::Level codeGenOptLevel,
-    bool noFramePointerElim,
-    bool noLinkerStripDead
-    );
+llvm::TargetMachine *createTargetMachine(
+    std::string iosArch, std::string targetTriple, std::string arch,
+    std::string cpu, std::vector<std::string> attrs,
+    ExplicitBitness::Type bitness, FloatABI::Type floatABI,
+    llvm::Reloc::Model relocModel, llvm::CodeModel::Model codeModel,
+    llvm::CodeGenOpt::Level codeGenOptLevel, bool noFramePointerElim,
+    bool noLinkerStripDead);
 
 /**
  * Returns the Mips ABI which is used for code generation.

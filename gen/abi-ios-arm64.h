@@ -16,6 +16,6 @@
 
 struct TargetABI;
 
-TargetABI* getIOSArm64TargetABI();
+TargetABI *getIOSArm64TargetABI();
 
 #endif
