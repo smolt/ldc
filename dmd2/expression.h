@@ -1617,7 +1617,12 @@ private:
         char sliceexp  [sizeof(SliceExp)];
 
         // Ensure that the union is suitably aligned.
+#if USE_OSX_TARGET_REAL
+        // TODO: need to fix so this conditional is not needed
+        long double for_alignment_only;
+#else
         longdouble for_alignment_only;
+#endif
     } u;
 };
 

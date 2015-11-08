@@ -176,6 +176,13 @@ static int linkObjToBinaryGcc(bool sharedLib)
     case llvm::Triple::Darwin:
     case llvm::Triple::MacOSX:
         args.push_back("-ldl");
+#if MACOSX_DEAD_STRIP
+        // Experiment, but early trials had some weird unittest failures
+        // possibly due to this
+        if (!opts::disableLinkerStripDead) {
+            args.push_back("-Wl,-dead_strip");
+        }
+#endif
         // fallthrough
     case llvm::Triple::FreeBSD:
         addSoname = true;

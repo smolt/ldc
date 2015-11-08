@@ -97,6 +97,11 @@ static cl::opt<bool, true> vgc("vgc",
     cl::ZeroOrMore,
     cl::location(global.params.vgc));
 
+static cl::opt<bool, true> verboseTls("vtls",
+    cl::desc("list TLS variables (useful if -disable-tls used)"),
+    cl::ZeroOrMore,
+    cl::location(global.params.vtls));
+
 static cl::opt<bool, true> verbose_cg("v-cg",
     cl::desc("Verbose codegen"),
     cl::ZeroOrMore,
@@ -291,9 +296,16 @@ cl::opt<std::string> moduleDepsFile("deps",
     cl::desc("Write module dependencies to filename"),
     cl::value_desc("filename"));
 
+// Provide a clang-like "-arch" for iOS targets.  It is used by the OS X based
+// tools to specify just the <arch><sub> part of the triple
+// <arch><sub>-<vendor>-<sys>-<abi>.  This differs from -march below that
+// implements an llc-like "-march" which selects a target name from the LLVM
+// TargetRegistery.
+cl::opt<std::string> iosArch("arch",
+    cl::desc("Specify the iOS architecture to build for (like clang -arch):"));
 
 cl::opt<std::string> mArch("march",
-    cl::desc("Architecture to generate code for:"));
+    cl::desc("Architecture to generate code for (like llc -march):"));
 
 cl::opt<bool> m32bits("m32",
     cl::desc("32 bit target"),
@@ -451,6 +463,13 @@ cl::opt<unsigned char, true, CoverageParser> coverageAnalysis("cov",
     cl::location(global.params.covPercent),
     cl::ValueOptional,
     cl::init(127));
+
+// Useful if target OS does not have TLS or threads, or perhaps you are
+// writing an OS.
+cl::opt<bool, true> disableTls("disable-tls",
+    cl::desc("Disable thread local storage (variables become __gshared)"),
+    cl::location(global.params.disableTls),
+    cl::init(false));
 
 static cl::extrahelp footer("\n"
 "-d-debug can also be specified without options, in which case it enables all\n"

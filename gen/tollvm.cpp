@@ -38,7 +38,12 @@ bool DtoIsPassedByRef(Type* type)
 {
     Type* typ = type->toBasetype();
     TY t = typ->ty;
+#if 0
+    // TODO: look into fixing this.  May be solution for passing structs by value.
+    return (t == Tsarray);
+#else
     return (t == Tstruct || t == Tsarray);
+#endif
 }
 
 RET retStyle(TypeFunction *tf)
@@ -448,7 +453,11 @@ LLConstant* DtoConstFP(Type* t, longdouble value)
     assert(llty->isFloatingPointTy());
 
     if(llty == LLType::getFloatTy(gIR->context()) || llty == LLType::getDoubleTy(gIR->context()))
+#if USE_OSX_TARGET_REAL
+        return LLConstantFP::get(llty, (double)value);
+#else
         return LLConstantFP::get(llty, value);
+#endif
     else if(llty == LLType::getX86_FP80Ty(gIR->context())) {
         uint64_t bits[] = { 0, 0 };
         bits[0] = *reinterpret_cast<uint64_t*>(&value);

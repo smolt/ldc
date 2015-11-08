@@ -229,7 +229,8 @@ LLConstant* toConstantArray(LLType* ct, LLArrayType* at, T* str, size_t len, boo
 /// can be the case due to pragma(mangle).
 llvm::GlobalVariable* getOrCreateGlobal(Loc& loc, llvm::Module& module,
     llvm::Type* type, bool isConstant, llvm::GlobalValue::LinkageTypes linkage,
-    llvm::Constant* init, llvm::StringRef name, bool isThreadLocal = false);
+    llvm::Constant* init, llvm::StringRef name, bool isThreadLocal = false,
+    const char* prettyName = NULL);
 
 FuncDeclaration* getParentFunc(Dsymbol* sym, bool stopOnStatic);
 

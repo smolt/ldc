@@ -46,6 +46,11 @@ namespace MipsABI {
     };
 }
 
+namespace ldc {
+    // Get the default triple, normally configured into LLVM
+    std::string getDefaultTriple();
+}
+
 namespace llvm { class TargetMachine; }
 
 /**
@@ -55,6 +60,7 @@ namespace llvm { class TargetMachine; }
  * Does not depend on any global state.
  */
 llvm::TargetMachine* createTargetMachine(
+    std::string iosArch,
     std::string targetTriple,
     std::string arch,
     std::string cpu,

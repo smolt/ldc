@@ -71,7 +71,15 @@ static inline llvm::Type* getReal80Type(llvm::LLVMContext& ctx)
     bool const anyX86 = (a == llvm::Triple::x86) || (a == llvm::Triple::x86_64);
 
     // only x86 has 80bit float - but no support with MS C Runtime!
-    if (anyX86 && !global.params.targetTriple.isWindowsMSVCEnvironment())
+    if (anyX86 &&
+#if USE_OSX_TARGET_REAL
+        // Note: This is here for completeness but only makes sense if
+        // libc/libm are also compiled for double precision.
+        !Real::useReal64() &&
+#endif
+        !global.params.targetTriple.isWindowsMSVCEnvironment()
+        )
+
         return llvm::Type::getX86_FP80Ty(ctx);
 
     return llvm::Type::getDoubleTy(ctx);

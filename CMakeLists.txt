@@ -180,6 +180,14 @@ if(CMAKE_COMPILER_IS_GNUCXX)
     string(REPLACE "-Wcovered-switch-default " "" LLVM_CXXFLAGS ${LLVM_CXXFLAGS})
     string(REPLACE "-fcolor-diagnostics " "" LLVM_CXXFLAGS ${LLVM_CXXFLAGS})
 endif()
+
+if(IPHONEOS_ARCHS)
+    # Enable cross compile to target real
+    append("-DUSE_OSX_TARGET_REAL" DMD_CXXFLAGS LDC_CXXFLAGS)
+    # Override llvm default target triple with one for iOS
+    append("-DIPHONEOS_DEFAULT_TRIPLE" LDC_CXXFLAGS)
+endif()
+
 #
 # Run idgen and impcnvgen.
 #

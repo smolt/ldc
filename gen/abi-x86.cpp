@@ -81,11 +81,8 @@ private:
         //   "Structures 1 or 2 bytes in size are placed in EAX. Structures 4
         //    or 8 bytes in size are placed in: EAX and EDX. Structures of
         //    other sizes are placed at the address supplied by the caller."
-        // Non-POD structs (non-C compatible) should always be returned in an
-        // arg though (yes, sometimes extern(C) functions return these, but C
-        // code does not handle struct lifecycle).
         size_t sz = t->Type::size();
-        return !t->sym->isPOD() || (sz != 1 && sz != 2 && sz != 4 && sz != 8);
+        return (sz != 1 && sz != 2 && sz != 4 && sz != 8);
     }
 
     bool isMagicCLong(Type *t)

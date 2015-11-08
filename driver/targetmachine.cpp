@@ -145,40 +145,9 @@ static std::string getX86TargetCPU(const llvm::Triple &triple)
 
 static std::string getARMTargetCPU(const llvm::Triple &triple)
 {
-    const char *result = llvm::StringSwitch<const char *>(triple.getArchName())
-        .Cases("armv2", "armv2a","arm2")
-        .Case("armv3", "arm6")
-        .Case("armv3m", "arm7m")
-        .Case("armv4", "strongarm")
-        .Case("armv4t", "arm7tdmi")
-        .Cases("armv5", "armv5t", "arm10tdmi")
-        .Cases("armv5e", "armv5te", "arm1026ejs")
-        .Case("armv5tej", "arm926ej-s")
-        .Cases("armv6", "armv6k", "arm1136jf-s")
-        .Case("armv6j", "arm1136j-s")
-        .Cases("armv6z", "armv6zk", "arm1176jzf-s")
-        .Case("armv6t2", "arm1156t2-s")
-        .Cases("armv6m", "armv6-m", "cortex-m0")
-        .Cases("armv7", "armv7a", "armv7-a", "cortex-a8")
-        .Cases("armv7l", "armv7-l", "cortex-a8")
-        .Cases("armv7f", "armv7-f", "cortex-a9-mp")
-        .Cases("armv7s", "armv7-s", "swift")
-        .Cases("armv7r", "armv7-r", "cortex-r4")
-        .Cases("armv7m", "armv7-m", "cortex-m3")
-        .Cases("armv7em", "armv7e-m", "cortex-m4")
-        .Cases("armv8", "armv8a", "armv8-a", "cortex-a53")
-        .Case("ep9312", "ep9312")
-        .Case("iwmmxt", "iwmmxt")
-        .Case("xscale", "xscale")
-        // If all else failed, return the most base CPU with thumb interworking
-        // supported by LLVM.
-        .Default(0);
-
-    if (result)
-        return result;
-
-    return (triple.getEnvironment() == llvm::Triple::GNUEABIHF) ?
-        "arm1176jzf-s" : "arm7tdmi";
+    return triple.getARMCPUForArch();
+    // Note: Previous version was copy+paste from clang Tools.cpp, but was
+    // missing thumbs.
 }
 
 /// Returns the LLVM name of the target CPU to use given the provided
@@ -187,16 +156,7 @@ static std::string getTargetCPU(const std::string &cpu,
     const llvm::Triple &triple)
 {
     if (!cpu.empty())
-    {
-        if (cpu != "native")
-            return cpu;
-
-        // FIXME: Reject attempts to use -mcpu=native unless the target matches
-        // the host.
-        std::string hostCPU = llvm::sys::getHostCPUName();
-        if (!hostCPU.empty() && hostCPU != "generic")
-            return hostCPU;
-    }
+        return cpu;
 
     switch (triple.getArch())
     {
@@ -208,12 +168,15 @@ static std::string getTargetCPU(const std::string &cpu,
     case llvm::Triple::x86_64:
         return getX86TargetCPU(triple);
     case llvm::Triple::arm:
+    case llvm::Triple::thumb:
         return getARMTargetCPU(triple);
+        // TODO: for AArch64?
     }
 }
 
 static const char *getLLVMArchSuffixForARM(llvm::StringRef CPU)
 {
+    // From clang Tools.cpp
     return llvm::StringSwitch<const char *>(CPU)
         .Case("strongarm", "v4")
         .Cases("arm7tdmi", "arm7tdmi-s", "arm710t", "v4t")
@@ -238,6 +201,30 @@ static const char *getLLVMArchSuffixForARM(llvm::StringRef CPU)
         .Case("cortex-a53", "v8")
         .Case("krait", "v7")
         .Default("");
+}
+
+static void convertiOSTriple(llvm::Triple& triple, const std::string& cpu)
+{
+    // Need to convert armv7, etc to thumbv7.
+    // See clang Darwin::ComputeEffectiveClangTriple which calls
+    // ToolChain::ComputeLLVMTriple to see how triple is translated based on
+    // arch.
+    switch (triple.getArch())
+    {
+    default:
+        break;
+    case llvm::Triple::arm:
+    case llvm::Triple::thumb: {
+        llvm::StringRef suffix =
+            getLLVMArchSuffixForARM(getTargetCPU(cpu, triple));
+        if (suffix.startswith("v6m") || suffix.startswith("v7m") ||
+            suffix.startswith("v7em") ||
+            (suffix.startswith("v7") && triple.isOSBinFormatMachO()))
+        {
+            triple.setArchName("thumb" + suffix.str());
+        }
+    }
+    }
 }
 
 static FloatABI::Type getARMFloatABI(const llvm::Triple &triple,
@@ -381,7 +368,24 @@ const llvm::Target *lookupTarget(const std::string &arch, llvm::Triple &triple,
     return target;
 }
 
+std::string ldc::getDefaultTriple()
+{
+    // Default triple if nothing else specified.
+    //
+    // llvm configure --target doesn't accept ios for the operating system
+    // like i386-apple-ios.  Can specify i386-apple-darwin, but that is
+    // assumed to be macosx.  Clang handles this by also looking at
+    // -mios_simulator_version_min or -miphoneos_version_min to decide on the
+    // OS.  We handle it by making our own default.
+#ifdef IPHONEOS_DEFAULT_TRIPLE
+    return "i386-apple-ios";
+#else
+    return llvm::sys::getDefaultTargetTriple();
+#endif
+}
+
 llvm::TargetMachine* createTargetMachine(
+    std::string iosArch,                     // if set, targetTriple and arch not
     std::string targetTriple,
     std::string arch,
     std::string cpu,
@@ -394,19 +398,33 @@ llvm::TargetMachine* createTargetMachine(
     bool noFramePointerElim,
     bool noLinkerStripDead)
 {
+    if (!cpu.empty() && cpu == "native")
+    {
+        // FIXME: Reject attempts to use -mcpu=native unless the target matches
+        // the host.
+        std::string hostCPU = llvm::sys::getHostCPUName();
+        if (!hostCPU.empty() && hostCPU != "generic")
+            cpu = hostCPU;
+    }
+
     // Determine target triple. If the user didn't explicitly specify one, use
     // the one set at LLVM configure time.
     llvm::Triple triple;
     if (targetTriple.empty())
     {
-        triple = llvm::Triple(llvm::sys::getDefaultTargetTriple());
+        triple = llvm::Triple(ldc::getDefaultTriple());
 
+        if (!iosArch.empty())
+        {
+            triple.setArchName(iosArch);
+            convertiOSTriple(triple, cpu);
+        }
         // Handle -m32/-m64.
-        if (sizeof(void*) == 4 && bitness == ExplicitBitness::M64)
+        else if (bitness == ExplicitBitness::M64)
         {
             triple = triple.get64BitArchVariant();
         }
-        else if (sizeof(void*) == 8 && bitness == ExplicitBitness::M32)
+        else if (bitness == ExplicitBitness::M32)
         {
             triple = triple.get32BitArchVariant();
         }
@@ -448,6 +466,24 @@ llvm::TargetMachine* createTargetMachine(
     for (unsigned i = 0; i < attrs.size(); ++i)
         features.AddFeature(attrs[i]);
 
+    // neon instructions sometimes misaligned so disable when optimizing.  Not
+    // sure of exact conditions but happens with llvm 3.5.1 with optimization
+    // turned on for thumb.  Check this out again to see if it still applies
+    // with llvm 3.6
+    if (triple.isiOS() &&
+        triple.getArch() == llvm::Triple::thumb &&
+        codeGenOptLevel != llvm::CodeGenOpt::None)
+    {
+        // -neon, unless explicity specified
+        bool neonAttr = false;
+        for (unsigned i = 0; i < attrs.size() && !neonAttr; ++i)
+            if (attrs[i].find("neon") != std::string::npos)
+                neonAttr = true;
+
+        if (!neonAttr)
+            features.AddFeature("-neon");
+    }
+
     // With an empty CPU string, LLVM will default to the host CPU, which is
     // usually not what we want (expected behavior from other compilers is
     // to default to "generic").
@@ -466,13 +502,18 @@ llvm::TargetMachine* createTargetMachine(
             features.AddFeature(cx16_plus);
     }
 
+    if (global.params.verbose)
+    {
+        fprintf(global.stdmsg,"targeting '%s' (CPU '%s' with features '%s')\n",
+                triple.str().c_str(), cpu.c_str(), features.getString().c_str());
+    }
     if (Logger::enabled())
     {
         Logger::println("Targeting '%s' (CPU '%s' with features '%s')",
             triple.str().c_str(), cpu.c_str(), features.getString().c_str());
     }
 
-    if (triple.isMacOSX() && relocModel == llvm::Reloc::Default)
+    if (triple.isOSDarwin() && relocModel == llvm::Reloc::Default)
     {
         // OS X defaults to PIC (and as of 10.7.5/LLVM 3.1-3.3, TLS use leads
         // to crashes for non-PIC code). LLVM doesn't handle this.
@@ -490,6 +531,7 @@ llvm::TargetMachine* createTargetMachine(
         case llvm::Triple::thumb:
             floatABI = getARMFloatABI(triple, getLLVMArchSuffixForARM(cpu));
             break;
+            // TODO: something for AArch64?
         }
     }
 

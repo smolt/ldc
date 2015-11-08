@@ -115,11 +115,19 @@ Expression *Target::paintAsType(Expression *e, Type *type)
             break;
 
         case Tfloat32:
+#if USE_OSX_TARGET_REAL
+            u.float32value = (float)e->toReal();
+#else
             u.float32value = e->toReal();
+#endif
             break;
 
         case Tfloat64:
+#if USE_OSX_TARGET_REAL
+            u.float64value = (double)e->toReal();
+#else
             u.float64value = e->toReal();
+#endif
             break;
 
         default:

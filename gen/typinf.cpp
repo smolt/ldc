@@ -284,7 +284,16 @@ public:
             else if (memtype->isString())
                 C = DtoConstString(static_cast<const char *>(defaultval->toStringExp()->string));
             else if (memtype->isfloating())
+#if USE_OSX_TARGET_REAL
+            {
+                if (Real::useReal64())
+                    C = LLConstantFP::get(memty, (double)defaultval->toReal());
+                else
+                    C = LLConstantFP::get(memty, (long double)defaultval->toReal());
+            }
+#else
                 C = LLConstantFP::get(memty, defaultval->toReal());
+#endif
             else
                 llvm_unreachable("Unsupported type");
 
