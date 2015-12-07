@@ -745,6 +745,7 @@ static void registerPredefinedTargetVersions() {
     VersionCondition::addPredefinedGlobalIdent("Posix");
     break;
   case llvm::Triple::Darwin:
+  case llvm::Triple::MacOSX:
     VersionCondition::addPredefinedGlobalIdent("OSX");
     VersionCondition::addPredefinedGlobalIdent(
         "darwin"); // For backwards compatibility.
@@ -1331,7 +1332,7 @@ int main(int argc, char **argv) {
     emitJson(modules);
   }
 
-  LLVM_D_FreeRuntime();
+  freeRuntime();
   llvm::llvm_shutdown();
 
   if (global.errors) {

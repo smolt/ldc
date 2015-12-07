@@ -426,6 +426,11 @@ llvm::TargetMachine *createTargetMachine(
   if (targetTriple.empty()) {
     triple = llvm::Triple(ldc::getDefaultTriple());
 
+    // We only support OSX, so darwin should really be macosx.
+    if (triple.getOS() == llvm::Triple::Darwin) {
+      triple.setOS(llvm::Triple::MacOSX);
+    }
+
     if (!iosArch.empty()) {
       triple.setArchName(iosArch);
       convertiOSTriple(triple, cpu);

@@ -78,6 +78,12 @@ list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/deh.c ${RUNTIME_DIR}/src/rt/dylib_
 if(APPLE)
     list(APPEND DCRT_C ${RUNTIME_DIR}/src/ldc/osx_tls.c)
 endif()
+if(MSVC)
+    list(APPEND DCRT_C ${RUNTIME_DIR}/src/ldc/msvc.c)
+else()
+    list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/msvc.c)
+    list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/msvc_math.c)
+endif()
 file(GLOB_RECURSE CORE_D_UNIX ${RUNTIME_DIR}/src/core/sys/posix/*.d)
 file(GLOB_RECURSE CORE_D_FREEBSD ${RUNTIME_DIR}/src/core/sys/freebsd/*.d)
 file(GLOB_RECURSE CORE_D_LINUX ${RUNTIME_DIR}/src/core/sys/linux/*.d)
@@ -112,8 +118,6 @@ if(UNIX)
     if(APPLE)
         list(APPEND CORE_D_SYS ${CORE_D_OSX})
     endif()
-    list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/msvc.c)
-    list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/stdio_msvc.c)
 
     # Using CMAKE_SYSTEM_PROCESSOR might be inacurrate when somebody is
     # cross-compiling by just setting the tool executbles to a cross toolchain,
@@ -123,9 +127,6 @@ elseif(WIN32)
     list(APPEND CORE_D_SYS ${CORE_D_WIN})
     list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/monitor.c)
     list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/bss_section.c)
-    if(NOT MSVC)
-        list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/stdio_msvc.c)
-    endif()
 endif()
 list(APPEND CORE_D ${CORE_D_INTERNAL} ${CORE_D_SYNC} ${CORE_D_SYS} ${CORE_D_STDC})
 list(APPEND CORE_D ${LDC_D} ${RUNTIME_DIR}/src/object.d)
@@ -742,6 +743,7 @@ macro(build_test_runner name_suffix d_flags c_flags)
     else()
         set(druntime_o "")
         set(druntime_bc "")
+        set(casm_lib_path "${CMAKE_BINARY_DIR}/lib")
         compile_druntime("${flags}" "-unittest${name_suffix}" "" druntime_o druntime_bc)
 
         # We need to compile a small static library with the C/ASM files, as
@@ -757,7 +759,7 @@ macro(build_test_runner name_suffix d_flags c_flags)
             LINKER_LANGUAGE             C
             COMPILE_FLAGS               "${RT_CFLAGS} ${c_flags}"
             LINK_FLAGS                  "${LD_FLAGS} ${ld_flags}"
-            ARCHIVE_OUTPUT_DIRECTORY    ${output_path}
+            ARCHIVE_OUTPUT_DIRECTORY    ${casm_lib_path}
         )
 
         # See shared library case for explanation.
@@ -789,7 +791,7 @@ macro(build_test_runner name_suffix d_flags c_flags)
                 LINKER_LANGUAGE             C
                 COMPILE_FLAGS               "${RT_CFLAGS} ${c_flags}"
                 LINK_FLAGS                  "${LD_FLAGS} ${ld_flags}"
-                ARCHIVE_OUTPUT_DIRECTORY    ${output_path}
+                ARCHIVE_OUTPUT_DIRECTORY    ${casm_lib_path}
             )
 
             set_target_properties(${phobos2-casm} PROPERTIES EXCLUDE_FROM_ALL ON EXCLUDE_FROM_DEFAULT_BUILD ON)
