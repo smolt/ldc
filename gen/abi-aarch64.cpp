@@ -56,9 +56,8 @@ struct AArch64TargetABI : TargetABI {
   * } va_list;
   *
   * In druntime, the struct is defined as core.stdc.stdarg.__va_list; the
-  * actually used
-  * core.stdc.stdarg.va_list type is a raw char* pointer though to achieve byref
-  * semantics.
+  * actually used core.stdc.stdarg.va_list type is a raw char* pointer though to
+  * achieve byref semantics.
   * This requires a little bit of compiler magic in the following
   * implementations.
   */
