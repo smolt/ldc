@@ -39,6 +39,12 @@ else()
     set(MULTILIB_SUFFIX 64)
 endif()
 
+# zlib needs HAVE_UNISTD_H on 64-bit iOS
+check_include_file(unistd.h HAVE_UNISTD_H)
+if(HAVE_UNISTD_H)
+    append("-DHAVE_UNISTD_H" CMAKE_C_FLAGS)
+endif()
+
 if(BUILD_SHARED_LIBS)
     if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         message(FATAL_ERROR "Shared libraries (BUILD_SHARED_LIBS) are only supported on Linux for the time being.")
