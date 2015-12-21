@@ -478,6 +478,12 @@ void DtoDeclareFunction(FuncDeclaration *fdecl) {
     }
   }
 
+  // dano hack to make sure it happens.  May only need for WatchOS exception
+  // handling.
+  // TODO: find the best place for this, and whether it should only be for
+  // WatchOS or others
+  func->addFnAttr("no-frame-pointer-elim", "true");
+
   // main
   if (fdecl->isMain()) {
     // Detect multiple main functions, which is disallowed. DMD checks this
