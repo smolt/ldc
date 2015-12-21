@@ -200,7 +200,12 @@ static const char *getLLVMArchSuffixForARM(llvm::StringRef CPU) {
       .Cases("arm1136j-s", "arm1136jf-s", "arm1176jz-s", "v6")
       .Cases("arm1176jzf-s", "mpcorenovfp", "mpcore", "v6")
       .Cases("arm1156t2-s", "arm1156t2f-s", "v6t2")
+#if LDC_LLVM_VER >= 308
+      .Cases("cortex-a5", "cortex-a8", "v7")
+      .Case("cortex-a7", "v7k")   // watchOS uses, based on ARMTargetParser.def
+#else
       .Cases("cortex-a5", "cortex-a7", "cortex-a8", "v7")
+#endif
       .Cases("cortex-a9", "cortex-a12", "cortex-a15", "v7")
       .Cases("cortex-r4", "cortex-r5", "v7r")
       .Case("cortex-m0", "v6m")
@@ -238,6 +243,9 @@ static FloatABI::Type getARMFloatABI(const llvm::Triple &triple,
   switch (triple.getOS()) {
   case llvm::Triple::Darwin:
   case llvm::Triple::MacOSX:
+#if LDC_LLVM_VER >= 308
+  case llvm::Triple::TvOS:
+#endif
   case llvm::Triple::IOS: {
     // Darwin defaults to "softfp" for v6 and v7.
     if (llvm::StringRef(llvmArchSuffix).startswith("v6") ||
@@ -246,6 +254,11 @@ static FloatABI::Type getARMFloatABI(const llvm::Triple &triple,
     }
     return FloatABI::Soft;
   }
+
+#if LDC_LLVM_VER >= 308
+  case llvm::Triple::WatchOS:
+      return FloatABI::Hard;
+#endif
 
   case llvm::Triple::FreeBSD:
     // FreeBSD defaults to soft float

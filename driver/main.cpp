@@ -750,6 +750,16 @@ static void registerPredefinedTargetVersions() {
     VersionCondition::addPredefinedGlobalIdent("iOS");
     VersionCondition::addPredefinedGlobalIdent("Posix");
     break;
+#if LDC_LLVM_VER >= 308
+  case llvm::Triple::WatchOS:
+    VersionCondition::addPredefinedGlobalIdent("WatchOS");
+    VersionCondition::addPredefinedGlobalIdent("Posix");
+    break;
+  case llvm::Triple::TvOS:
+    VersionCondition::addPredefinedGlobalIdent("TVOS");
+    VersionCondition::addPredefinedGlobalIdent("Posix");
+    break;
+#endif
   case llvm::Triple::Darwin:
   case llvm::Triple::MacOSX:
     VersionCondition::addPredefinedGlobalIdent("OSX");
@@ -906,8 +916,16 @@ static void emitJson(Modules &modules) {
 }
 
 static bool validiOSArch(const std::string &iosArch) {
-  return (iosArch == "i386" || iosArch == "x86_64" || iosArch == "armv6" ||
-          iosArch == "armv7" || iosArch == "armv7s" || iosArch == "arm64");
+  // TODO: should be renamed as validDarwinArch
+  return (iosArch == "i386" ||
+          iosArch == "x86_64" ||
+          iosArch == "armv6" ||
+          iosArch == "armv7" ||
+          iosArch == "armv7s" ||
+#if LDC_LLVM_VER >= 308
+          iosArch == "armv7k" ||
+#endif
+          iosArch == "arm64");
 }
 
 int main(int argc, char **argv) {
