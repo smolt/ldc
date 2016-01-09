@@ -716,6 +716,22 @@ static void addCoverageAnalysisInitializer(Module *m) {
 
 static void genModuleInfo(Module *m, bool emitFullModuleInfo);
 
+static void genFakeBitCode(IRState *p) {
+  // make bitcode sections without any real contents.  This seems to satisfy
+  // the linker
+  llvm::StringRef s("", 0);
+  LLConstant* init = llvm::ConstantDataArray::getString(p->context(), s, true);
+  auto llvmBitcode = new llvm::GlobalVariable(
+      p->module, init->getType(), true, llvm::GlobalValue::AppendingLinkage,
+      init, "llvm.embedded.module");
+  llvmBitcode->setSection("__LLVM,__bitcode");
+  auto llvmCmdline = new llvm::GlobalVariable(
+      p->module, init->getType(), true, llvm::GlobalValue::AppendingLinkage,
+      init, "llvm.cmdline");
+  llvmCmdline->setSection("__LLVM,__cmdline");
+}
+
+
 void codegenModule(IRState *irs, Module *m, bool emitFullModuleInfo) {
   assert(!irs->dmodule &&
          "irs->module not null, codegen already in progress?!");
@@ -741,6 +757,8 @@ void codegenModule(IRState *irs, Module *m, bool emitFullModuleInfo) {
   if (global.errors) {
     fatal();
   }
+
+  genFakeBitCode(irs);
 
   // Skip emission of all the additional module metadata if requested by the
   // user.
