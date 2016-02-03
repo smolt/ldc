@@ -59,7 +59,7 @@ static cl::opt<signed char> optimizeLevel(
         clEnumValN(-1, "Os", "Like -O2 with extra optimizations for size"),
         clEnumValN(-2, "Oz", "Like -Os but reduces code size further"),
         clEnumValEnd),
-    cl::init(0));
+    cl::init(1));
 
 static cl::opt<bool> noVerify("disable-verify",
                               cl::desc("Do not verify result module"),
