@@ -124,6 +124,7 @@ if(UNIX)
     # cross-compiling by just setting the tool executbles to a cross toolchain,
     # so just always include the file.
     list(APPEND DCRT_C ${RUNTIME_DIR}/src/ldc/arm_unwind.c)
+    list(APPEND DCRT_C ${RUNTIME_DIR}/src/ldc/eh/eh_shell.S)
 elseif(WIN32)
     list(APPEND CORE_D_SYS ${CORE_D_WIN})
     list(REMOVE_ITEM DCRT_C ${RUNTIME_DIR}/src/rt/monitor.c)
