@@ -94,6 +94,11 @@ struct ArmTargetABI : TargetABI {
       if (!arg->byref)
         rewriteArgument(fty, *arg);
     }
+
+    // extern(D): reverse parameter order for non variadics, for DMD-compliance
+    if (tf->linkage == LINKd && tf->varargs != 1 && fty.args.size() > 1) {
+      fty.reverseParams = true;
+    }
   }
 
   void rewriteArgument(IrFuncTy &fty, IrFuncTyArg &arg) override {
@@ -119,6 +124,16 @@ struct ArmTargetABI : TargetABI {
       }
     }
   }
+
+#if 0
+  Type *vaListType() override {
+    // We need to pass the actual va_list type for correct mangling. Simply
+    // using TypeIdentifier here is a bit wonky but works, as long as the name
+    // is actually available in the scope (this is what DMD does, so if a better
+    // solution is found there, this should be adapted).
+    return (new TypeIdentifier(Loc(), Identifier::idPool("va_list")));
+  }
+#endif
 };
 
 TargetABI *getArmTargetABI() { return new ArmTargetABI; }
