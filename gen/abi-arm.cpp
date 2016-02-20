@@ -67,14 +67,30 @@ struct ArmTargetABI : TargetABI {
   }
 
   bool passByVal(Type *t) override {
-    // AAPCS does not pass byval
-    return false;
+    // AAPCS does not pass byval but clang uses it for types >
+    // 64-bytes, then llvm backend converts back to non-byval.  Not
+    // sure of reason, but without this special handling there are
+    // codegen problems.
+    t = t->toBasetype();
+    return ((t->ty == Tsarray || t->ty == Tstruct) && t->size() > 64);
+
+    // Note: byval can have a codegen problem with -O1 and higher.
+    // What happens is that load instructions are being incorrectly
+    // reordered before stores.  It is a problem in the LLVM backend.
+    // The result is a program with incorrect results or crashes.
+    // It happens in the "top-down list latency scheduler" pass
+    //
+    //   https://forum.dlang.org/post/m2r3u5ac0c.fsf@comcast.net
+    //
+    // Should revist and determine if the byval problem is only for
+    // small structs, say 16-bytes or less, that can entirely fit in
+    // registers.
 
     // Note: the codegen is horrible for Tsarrays passed this way - tries to do
     // copy without a loop for huge arrays.  Would be better if byval was used
     // for arrays, but then there is an optimizer problem in the "top-down list
     // latency scheduler" pass that reorders instructions incorrectly if byval
-    // used.
+    // used.  Revisit this too.
   }
 
   void rewriteFunctionType(TypeFunction *tf, IrFuncTy &fty) override {
