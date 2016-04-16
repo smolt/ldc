@@ -62,8 +62,7 @@ DValue *DtoNestedVariable(Loc &loc, Type *astype, VarDeclaration *vd,
     if (fd->isStatic()) {
       error(loc, "function %s cannot access frame of function %s",
             irfunc->decl->toPrettyChars(), vdparent->toPrettyChars());
-      return new DVarValue(astype, vd,
-                           llvm::UndefValue::get(DtoPtrToType(astype)));
+      return new DVarValue(astype, llvm::UndefValue::get(DtoPtrToType(astype)));
     }
     fd = getParentFunc(fd, false);
     assert(fd);
@@ -71,8 +70,7 @@ DValue *DtoNestedVariable(Loc &loc, Type *astype, VarDeclaration *vd,
 
   // is the nested variable in this scope?
   if (vdparent == irfunc->decl) {
-    LLValue *val = getIrValue(vd);
-    return new DVarValue(astype, vd, val);
+    return makeVarDValue(astype, vd);
   }
 
   LLValue *dwarfValue = nullptr;
@@ -120,8 +118,9 @@ DValue *DtoNestedVariable(Loc &loc, Type *astype, VarDeclaration *vd,
     Logger::cout() << "of type: " << *irfunc->frameType << '\n';
   }
 
-  unsigned vardepth = getIrLocal(vd)->nestedDepth;
-  unsigned funcdepth = irfunc->depth;
+  IrLocal *const irLocal = getIrLocal(vd);
+  const auto vardepth = irLocal->nestedDepth;
+  const auto funcdepth = irfunc->depth;
 
   IF_LOG {
     Logger::cout() << "Variable: " << vd->toChars() << '\n';
@@ -148,7 +147,7 @@ DValue *DtoNestedVariable(Loc &loc, Type *astype, VarDeclaration *vd,
     IF_LOG Logger::cout() << "Frame: " << *val << '\n';
   }
 
-  int idx = getIrLocal(vd)->nestedIndex;
+  const auto idx = irLocal->nestedIndex;
   assert(idx != -1 && "Nested context not yet resolved for variable.");
 
   if (dwarfValue && global.params.symdebug) {
@@ -165,8 +164,8 @@ DValue *DtoNestedVariable(Loc &loc, Type *astype, VarDeclaration *vd,
     val = DtoAlignedLoad(val);
     // dwarfOpDeref(dwarfAddr);
     IF_LOG {
-      Logger::cout() << "Was byref, now: " << *val << '\n';
-      Logger::cout() << "of type: " << *val->getType() << '\n';
+      Logger::cout() << "Was byref, now: " << *irLocal->value << '\n';
+      Logger::cout() << "of type: " << *irLocal->value->getType() << '\n';
     }
   }
 
@@ -174,7 +173,7 @@ DValue *DtoNestedVariable(Loc &loc, Type *astype, VarDeclaration *vd,
     gIR->DBuilder.EmitLocalVariable(dwarfValue, vd, nullptr, false, dwarfAddr);
   }
 
-  return new DVarValue(astype, vd, val);
+  return makeVarDValue(astype, vd, val);
 }
 
 void DtoResolveNestedContext(Loc &loc, AggregateDeclaration *decl,
@@ -208,7 +207,11 @@ LLValue *DtoNestedContext(Loc &loc, Dsymbol *sym) {
   // Exit quickly for functions that accept a context pointer for ABI purposes,
   // but do not actually read from it.
   //
-  // We cannot simply fall back to retuning undef once we discover that we
+  // null is used instead of LLVM's undef to not break bitwise comparison,
+  // for instances of nested struct types which don't have any nested
+  // references, or for delegates to nested functions with an empty context.
+  //
+  // We cannot simply fall back to retuning null once we discover that we
   // don't actually have a context to pass, because we sadly also need to
   // catch invalid code here in the glue layer (see error() below).
   if (FuncDeclaration *symfd = sym->isFuncDeclaration()) {
@@ -219,8 +222,8 @@ LLValue *DtoNestedContext(Loc &loc, Dsymbol *sym) {
     Logger::println("for function of depth %d", depth);
     if (depth == -1 || (depth == 0 && !symfd->closureVars.empty())) {
       Logger::println("function does not have context or creates its own "
-                      "from scratch, returning undef");
-      return llvm::UndefValue::get(getVoidPtrType());
+                      "from scratch, returning null");
+      return llvm::ConstantPointerNull::get(getVoidPtrType());
     }
   }
 
@@ -260,10 +263,6 @@ LLValue *DtoNestedContext(Loc &loc, Dsymbol *sym) {
             sym->toPrettyChars(), irfunc->decl->toPrettyChars());
       fatal();
     }
-
-    // Use null instead of e.g. LLVM's undef to not break bitwise
-    // comparison for instances of nested struct types which don't have any
-    // nested references.
     return llvm::ConstantPointerNull::get(getVoidPtrType());
   }
 

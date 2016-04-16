@@ -20,7 +20,7 @@
 #include "gen/abi-ios-arm64.h"
 
 namespace {
-
+#if 0
 // A Homogeneous Floating-point Aggregate (HFA) consists of up to 4 of same
 // floating point type (all float or all double). The iOS C-ABI considers real
 // (long double) same as double.  Also consider D floats of same size as same
@@ -180,6 +180,7 @@ struct CompositeToArray64 : ABIRewrite {
     return LLArrayType::get(LLIntegerType::get(gIR->context(), 64), sz);
   }
 };
+#endif
 
 // Rewrites a composite as an integer of the same size.
 struct CompositeToInt : ABIRewrite {

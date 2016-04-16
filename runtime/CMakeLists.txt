@@ -92,6 +92,7 @@ else()
 endif()
 file(GLOB_RECURSE CORE_D_UNIX ${RUNTIME_DIR}/src/core/sys/posix/*.d)
 file(GLOB_RECURSE CORE_D_FREEBSD ${RUNTIME_DIR}/src/core/sys/freebsd/*.d)
+file(GLOB_RECURSE CORE_D_NETBSD ${RUNTIME_DIR}/src/core/sys/netbsd/*.d)
 file(GLOB_RECURSE CORE_D_LINUX ${RUNTIME_DIR}/src/core/sys/linux/*.d)
 file(GLOB_RECURSE CORE_D_OSX ${RUNTIME_DIR}/src/core/sys/osx/*.d)
 file(GLOB_RECURSE CORE_D_SOLARIS ${RUNTIME_DIR}/src/core/sys/solaris/*.d)
@@ -102,6 +103,9 @@ if(UNIX)
     list(APPEND CORE_D_SYS ${CORE_D_UNIX})
     if(${CMAKE_SYSTEM} MATCHES "FreeBSD")
         list(APPEND CORE_D_SYS ${CORE_D_FREEBSD})
+    endif()
+    if(${CMAKE_SYSTEM} MATCHES "NetBSD")
+        list(APPEND CORE_D_SYS ${CORE_D_NETBSD})
     endif()
     if(${CMAKE_SYSTEM} MATCHES "Linux")
         list(APPEND CORE_D_SYS ${CORE_D_LINUX})
@@ -120,6 +124,7 @@ if(UNIX)
         message(WARNING "Please consider updating CMake to at least 2.8.5.")
     else()
         list(APPEND DCRT_ASM ${RUNTIME_DIR}/src/core/threadasm.S)
+        list(APPEND DCRT_ASM ${RUNTIME_DIR}/src/ldc/eh_asm.S)
     endif()
     if(APPLE)
         list(APPEND CORE_D_SYS ${CORE_D_OSX})
@@ -226,11 +231,30 @@ configure_file(${PROJECT_PARENT_DIR}/${LDC_EXE}_install.conf.in ${PROJECT_BINARY
 # druntime/Phobos compilation helpers.
 #
 
-set(GCCBUILTINS "${PROJECT_BINARY_DIR}/gccbuiltins_x86.di")
-add_custom_command(
-    OUTPUT ${GCCBUILTINS}
-    COMMAND gen_gccbuiltins ${GCCBUILTINS} "x86"
-)
+set(GCCBUILTINS "")
+function(gen_gccbuiltins name)
+  set(module "${PROJECT_BINARY_DIR}/gccbuiltins_${name}.di")
+  if (GCCBUILTINS STREQUAL "")
+    set(GCCBUILTINS "${module}" PARENT_SCOPE)
+  else()
+    set(GCCBUILTINS "${GCCBUILTINS};${module}" PARENT_SCOPE)
+  endif()
+  add_custom_command(
+      OUTPUT ${module}
+      COMMAND gen_gccbuiltins ${module} "${name}"
+  )
+endfunction()
+
+set(target_arch "AArch64;ARM;Mips;PowerPC;SystemZ;X86")
+set(target_name "aarch64;arm;mips;ppc;s390;x86")
+
+foreach(target ${LLVM_TARGETS_TO_BUILD})
+  list(FIND target_arch ${target} idx)
+  if(idx GREATER -1)
+    list(GET target_name ${idx} name)
+    gen_gccbuiltins(${name})
+  endif()
+endforeach()
 
 # Always build zlib and other C parts of the runtime in release mode, regardless
 # of what the user chose for LDC itself.
@@ -848,19 +872,13 @@ endmacro()
 function(add_tests d_files runner name_suffix)
     foreach(file ${d_files})
         file_to_module_name(${file} module)
-        if("${module}" STREQUAL "core.internal.convert")
-            # Exclude unit tests for now, as they fail due to a CTFE vs. runtime
-            # issue with floating point numbers. See the discussion on GitHub
-            # pull request #770. To be revisited after 0.15.0 is out.
-        else()
-            add_test(NAME "${module}${name_suffix}"
-                WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
-                COMMAND ${runner}-test-runner${name_suffix} ${module}
-            )
-            set_tests_properties("${module}${name_suffix}" PROPERTIES
-                DEPENDS build-${runner}-test-runner${name_suffix}
-            )
-        endif()
+        add_test(NAME "${module}${name_suffix}"
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
+            COMMAND ${runner}-test-runner${name_suffix} ${module}
+        )
+        set_tests_properties("${module}${name_suffix}" PROPERTIES
+            DEPENDS build-${runner}-test-runner${name_suffix}
+	)
     endforeach()
 endfunction()
 function(add_runtime_tests name_suffix)

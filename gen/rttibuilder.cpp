@@ -42,8 +42,14 @@ RTTIBuilder::RTTIBuilder(AggregateDeclaration *base_class) {
 void RTTIBuilder::push(llvm::Constant *C) {
   // We need to explicitly zero any padding bytes as per TDPL §7.1.1 (and
   // also match the struct type lowering code here).
-  const uint64_t fieldStart = llvm::RoundUpToAlignment(
-      prevFieldEnd, gDataLayout->getABITypeAlignment(C->getType()));
+  const uint64_t fieldStart =
+#if LDC_LLVM_VER >= 309
+    llvm::alignTo
+#else
+    llvm::RoundUpToAlignment
+#endif
+    (prevFieldEnd, gDataLayout->getABITypeAlignment(C->getType()));
+
   const uint64_t paddingBytes = fieldStart - prevFieldEnd;
   if (paddingBytes) {
     llvm::Type *const padding = llvm::ArrayType::get(
@@ -80,9 +86,11 @@ void RTTIBuilder::push_void_array(llvm::Constant *CI, Type *valtype,
   std::string initname(mangle(mangle_sym));
   initname.append(".rtti.voidarr.data");
 
+  const LinkageWithCOMDAT lwc(TYPEINFO_LINKAGE_TYPE, supportsCOMDAT());
+
   auto G = new LLGlobalVariable(gIR->module, CI->getType(), true,
-                                TYPEINFO_LINKAGE_TYPE, CI, initname);
-  SET_COMDAT(G, gIR->module);
+                                lwc.first, CI, initname);
+  setLinkage(lwc, G);
   G->setAlignment(DtoAlignment(valtype));
 
   push_void_array(getTypeAllocSize(CI->getType()), G);
@@ -100,9 +108,11 @@ void RTTIBuilder::push_array(llvm::Constant *CI, uint64_t dim, Type *valtype,
   initname.append(tmpStr);
   initname.append(".data");
 
+  const LinkageWithCOMDAT lwc(TYPEINFO_LINKAGE_TYPE, supportsCOMDAT());
+
   auto G = new LLGlobalVariable(gIR->module, CI->getType(), true,
-                                TYPEINFO_LINKAGE_TYPE, CI, initname);
-  SET_COMDAT(G, gIR->module);
+                                lwc.first, CI, initname);
+  setLinkage(lwc, G);
   G->setAlignment(DtoAlignment(valtype));
 
   push_array(dim, DtoBitCast(G, DtoType(valtype->pointerTo())));
@@ -159,8 +169,7 @@ void RTTIBuilder::finalize(LLType *type, LLValue *value) {
   // set the initializer
   llvm::GlobalVariable *gvar = llvm::cast<llvm::GlobalVariable>(value);
   gvar->setInitializer(tiInit);
-  gvar->setLinkage(TYPEINFO_LINKAGE_TYPE);
-  SET_COMDAT(gvar, gIR->module);
+  setLinkage({TYPEINFO_LINKAGE_TYPE, supportsCOMDAT()}, gvar);
 }
 
 LLConstant *RTTIBuilder::get_constant(LLStructType *initType) {

@@ -65,16 +65,20 @@ LLValue *DtoDelegateEquals(TOK op, LLValue *lhs, LLValue *rhs);
 typedef std::pair<llvm::GlobalValue::LinkageTypes, bool> LinkageWithCOMDAT;
 LinkageWithCOMDAT DtoLinkage(Dsymbol *sym);
 
+bool supportsCOMDAT();
+void setLinkage(LinkageWithCOMDAT lwc, llvm::GlobalObject *obj);
+void setLinkage(Dsymbol *sym, llvm::GlobalObject *obj);
+
 // some types
 LLIntegerType *DtoSize_t();
 LLStructType *DtoMutexType();
 LLStructType *DtoModuleReferenceType();
 
 // getelementptr helpers
-LLValue *DtoGEP1(LLValue *ptr, LLValue *i0, const char *name = "",
-                 llvm::BasicBlock *bb = nullptr);
-LLValue *DtoGEP(LLValue *ptr, LLValue *i0, LLValue *i1, const char *name = "",
-                llvm::BasicBlock *bb = nullptr);
+LLValue *DtoGEP1(LLValue *ptr, LLValue *i0, bool inBounds,
+                 const char *name = "", llvm::BasicBlock *bb = nullptr);
+LLValue *DtoGEP(LLValue *ptr, LLValue *i0, LLValue *i1, bool inBounds,
+                const char *name = "", llvm::BasicBlock *bb = nullptr);
 
 LLValue *DtoGEPi1(LLValue *ptr, unsigned i0, const char *name = "",
                   llvm::BasicBlock *bb = nullptr);
@@ -100,7 +104,7 @@ void DtoStore(LLValue *src, LLValue *dst);
 void DtoVolatileStore(LLValue *src, LLValue *dst);
 void DtoStoreZextI8(LLValue *src, LLValue *dst);
 void DtoAlignedStore(LLValue *src, LLValue *dst);
-LLValue *DtoBitCast(LLValue *v, LLType *t, const char *name = "");
+LLValue *DtoBitCast(LLValue *v, LLType *t, const llvm::Twine &name = "");
 LLConstant *DtoBitCast(LLConstant *v, LLType *t);
 LLValue *DtoInsertValue(LLValue *aggr, LLValue *v, unsigned idx,
                         const char *name = "");

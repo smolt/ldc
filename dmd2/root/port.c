@@ -651,7 +651,7 @@ longdouble Port::strtold(const char *p, char **endp)
 
 #endif
 
-#if __linux__ || __APPLE__ || __FreeBSD__ || __OpenBSD__ || __DragonFly__ || __HAIKU__
+#if __linux__ || __APPLE__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ || __DragonFly__ || __HAIKU__
 
 #include <math.h>
 #if __linux__
@@ -672,6 +672,10 @@ longdouble Port::strtold(const char *p, char **endp)
 #include <float.h>
 #include <assert.h>
 #include "target.h"
+
+#if IN_LLVM
+#include "llvm/ADT/APFloat.h"
+#endif
 
 double Port::nan;
 longdouble Port::ldbl_nan;
@@ -733,92 +737,43 @@ static PortInitializer portinitializer;
 PortInitializer::PortInitializer()
 {
 #if IN_LLVM
-    union
-    {   unsigned int ui[2];
-        double d;
-    } nan =
-#if __LITTLE_ENDIAN__
-    {{ 0, 0x7FF80000 }};
+
+// Derive LLVM APFloat::fltSemantics from native format
+#if USE_OSX_TARGET_REAL
+// OSX_TARGET_REAL approach uses extended precision and coverts to double as
+// needed by longdouble class when targeting 64-bit real.
+#define FLT_SEMANTIC llvm::APFloat::x87DoubleExtended
+#elif LDBL_MANT_DIG == 53
+#define FLT_SEMANTIC llvm::APFloat::IEEEdouble
+#elif LDBL_MANT_DIG == 64
+#define FLT_SEMANTIC llvm::APFloat::x87DoubleExtended
+#elif LDBL_MANT_DIG == 106
+#define FLT_SEMANTIC llvm::APFloat::PPCDoubleDouble
+#elif LDBL_MANT_DIG == 113
+#define FLT_SEMANTIC llvm::APFloat::IEEEquad
 #else
-    {{ 0x7FF80000, 0 }};
+#error "Unsupported native floating point format"
 #endif
+
+    Port::nan = *reinterpret_cast<const double*>(llvm::APFloat::getNaN(llvm::APFloat::IEEEdouble).bitcastToAPInt().getRawData());
+    Port::ldbl_nan = *reinterpret_cast<const longdouble*>(llvm::APFloat::getNaN(FLT_SEMANTIC).bitcastToAPInt().getRawData());
+    Port::snan = *reinterpret_cast<const longdouble*>(llvm::APFloat::getSNaN(FLT_SEMANTIC).bitcastToAPInt().getRawData());
 #else
     union
     {   unsigned int ui[2];
         double d;
     } nan = {{ 0, 0x7FF80000 }};
-#endif
     Port::nan = nan.d;
     assert(!signbit(Port::nan));
 
-#if IN_LLVM
-#if USE_OSX_TARGET_REAL
-    if (Real::useReal64())
-#else
-    if (sizeof(double) == sizeof(longdouble))
-#endif
-    {
-        // double and longdouble are same type.
-        // E.g. on ARM.
-        Port::ldbl_nan = Port::nan;
-    }
-    else
-    {
-        union
-        {   unsigned int ui[4];
-            longdouble ld;
-        } ldbl_nan =
-#if __LITTLE_ENDIAN__
-        {{ 0, 0xC0000000, 0x7FFF, 0}};
-#else
-        {{ 0, 0x7FFF, 0xC0000000, 0}};
-#endif
-        Port::ldbl_nan = ldbl_nan.ld;
-    }
-#else
     union
     {   unsigned int ui[4];
         longdouble ld;
     } ldbl_nan = {{ 0, 0xC0000000, 0x7FFF, 0}};
     Port::ldbl_nan = ldbl_nan.ld;
-#endif
 
     assert(!signbit(Port::ldbl_nan));
 
-#if IN_LLVM
-#if USE_OSX_TARGET_REAL
-    if (Real::useReal64())
-#else
-    if (sizeof(double) == sizeof(longdouble))
-#endif
-    {
-        // double and longdouble are same type.
-        // E.g. on ARM.
-        union
-        {   unsigned int ui[2];
-            double d;
-        } snan =
-#if __LITTLE_ENDIAN__
-        {{ 0, 0x7FFC0000 }};
-#else
-        {{ 0x7FFC0000, 0 }};
-#endif
-        Port::snan = snan.d;
-    }
-    else
-    {
-        union
-        {   unsigned int ui[4];
-            longdouble     ld;
-        } snan =
-    #if __LITTLE_ENDIAN__
-        {{ 0, 0xA0000000, 0x7FFF, 0 }};
-    #else
-        {{ 0, 0x7FFF, 0xA0000000, 0 }};
-    #endif
-        Port::snan = snan.ld;
-    }
-#else
     union
     {   unsigned int ui[4];
         longdouble     ld;
@@ -844,7 +799,7 @@ int Port::isNan(double r)
 #else
     return __inline_isnan(r);
 #endif
-#elif __HAIKU__ || __FreeBSD__ || __OpenBSD__ || __DragonFly__
+#elif __HAIKU__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ || __DragonFly__
     return isnan(r);
 #else
     #undef isnan
@@ -862,7 +817,7 @@ int Port::isNan(longdouble r)
 #else
     return __inline_isnan(r);
 #endif
-#elif __HAIKU__ || __FreeBSD__ || __OpenBSD__ || __DragonFly__
+#elif __HAIKU__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ || __DragonFly__
     return isnan(r);
 #else
     #undef isnan
@@ -890,7 +845,7 @@ int Port::isInfinity(double r)
 {
 #if __APPLE__
     return fpclassify(r) == FP_INFINITE;
-#elif __HAIKU__ || __FreeBSD__ || __OpenBSD__ || __DragonFly__
+#elif __HAIKU__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ ||  __DragonFly__
     return isinf(r);
 #else
     #undef isinf
@@ -916,7 +871,7 @@ longdouble Port::sqrt(longdouble x)
 
 longdouble Port::fmodl(longdouble x, longdouble y)
 {
-#if __FreeBSD__ && __FreeBSD_version < 800000 || __OpenBSD__ || __DragonFly__
+#if __FreeBSD__ && __FreeBSD_version < 800000 || __OpenBSD__ || __NetBSD__ || __DragonFly__
     return ::fmod(x, y);        // hack for now, fix later
 #elif USE_OSX_TARGET_REAL
     return ::fmodl((long double)x, (long double)y);

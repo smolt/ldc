@@ -75,18 +75,19 @@ void ldc::DIBuilder::Declare(const Loc &loc, llvm::Value *var,
 #endif
                              ) {
   unsigned charnum = (loc.linnum ? loc.charnum : 0);
-  llvm::Instruction *instr = DBuilder.insertDeclare(
-      var, divar,
-#if LDC_LLVM_VER >= 306
-      diexpr,
-#endif
-#if LDC_LLVM_VER >= 307
-      llvm::DebugLoc::get(loc.linnum, charnum, GetCurrentScope()),
-#endif
-      IR->scopebb());
 #if LDC_LLVM_VER < 307
+  llvm::Instruction *instr = DBuilder.insertDeclare(var, divar,
+#if LDC_LLVM_VER >= 306
+                                                    diexpr,
+#endif
+                                                    IR->scopebb());
   instr->setDebugLoc(
       llvm::DebugLoc::get(loc.linnum, charnum, GetCurrentScope()));
+#else // if LLVM >= 3.7
+  DBuilder.insertDeclare(
+      var, divar, diexpr,
+      llvm::DebugLoc::get(loc.linnum, charnum, GetCurrentScope()),
+      IR->scopebb());
 #endif
 }
 
@@ -149,9 +150,9 @@ ldc::DIType ldc::DIBuilder::CreateBasicType(Type *type) {
         "Unsupported basic type for debug info in DIBuilder::CreateBasicType");
   }
 
-  return DBuilder.createBasicType(type->toChars(),        // name
-                                  getTypeBitSize(T),      // size (bits)
-                                  getABITypeAlign(T) * 8, // align (bits)
+  return DBuilder.createBasicType(type->toChars(),         // name
+                                  getTypeAllocSize(T) * 8, // size (bits)
+                                  getABITypeAlign(T) * 8,  // align (bits)
                                   Encoding);
 }
 
@@ -180,7 +181,7 @@ ldc::DIType ldc::DIBuilder::CreateEnumType(Type *type) {
 
   return DBuilder.createEnumerationType(
       GetCU(), Name, File, LineNumber,
-      getTypeBitSize(T),                     // size (bits)
+      getTypeAllocSize(T) * 8,               // size (bits)
       getABITypeAlign(T) * 8,                // align (bits)
       DBuilder.getOrCreateArray(subscripts), // subscripts
       CreateTypeDescription(te->sym->memtype, false));
@@ -199,9 +200,9 @@ ldc::DIType ldc::DIBuilder::CreatePointerType(Type *type) {
   ldc::DIType basetype(CreateTypeDescription(nt, false));
 
   return DBuilder.createPointerType(basetype,
-                                    getTypeBitSize(T),      // size (bits)
-                                    getABITypeAlign(T) * 8, // align (bits)
-                                    type->toChars()         // name
+                                    getTypeAllocSize(T) * 8, // size (bits)
+                                    getABITypeAlign(T) * 8,  // align (bits)
+                                    type->toChars()          // name
                                     );
 }
 
@@ -223,7 +224,7 @@ ldc::DIType ldc::DIBuilder::CreateVectorType(Type *type) {
   ldc::DIType basetype(CreateTypeDescription(te, false));
 
   return DBuilder.createVectorType(
-      getTypeBitSize(T),                    // size (bits)
+      getTypeAllocSize(T) * 8,              // size (bits)
       getABITypeAlign(T) * 8,               // align (bits)
       basetype,                             // element type
       DBuilder.getOrCreateArray(subscripts) // subscripts
@@ -258,14 +259,14 @@ ldc::DIType ldc::DIBuilder::CreateMemberType(unsigned linnum, Type *type,
   }
 
   return DBuilder.createMemberType(GetCU(),
-                                   c_name,                 // name
-                                   file,                   // file
-                                   linnum,                 // line number
-                                   getTypeBitSize(T),      // size (bits)
-                                   getABITypeAlign(T) * 8, // align (bits)
-                                   offset * 8,             // offset (bits)
-                                   Flags,                  // flags
-                                   basetype                // derived from
+                                   c_name,                  // name
+                                   file,                    // file
+                                   linnum,                  // line number
+                                   getTypeAllocSize(T) * 8, // size (bits)
+                                   getABITypeAlign(T) * 8,  // align (bits)
+                                   offset * 8,              // offset (bits)
+                                   Flags,                   // flags
+                                   basetype                 // derived from
                                    );
 }
 
@@ -379,18 +380,18 @@ ldc::DIType ldc::DIBuilder::CreateCompositeType(Type *type) {
                                    name,   // name
                                    file,   // file where defined
                                    linnum, // line number where defined
-                                   getTypeBitSize(T),      // size in bits
-                                   getABITypeAlign(T) * 8, // alignment in bits
-                                   0,                      // offset in bits,
-                                   DIFlags::FlagFwdDecl,   // flags
-                                   derivedFrom,            // DerivedFrom
+                                   getTypeAllocSize(T) * 8, // size in bits
+                                   getABITypeAlign(T) * 8,  // alignment in bits
+                                   0,                       // offset in bits,
+                                   DIFlags::FlagFwdDecl,    // flags
+                                   derivedFrom,             // DerivedFrom
                                    elemsArray);
   } else {
     ret = DBuilder.createStructType(CU,     // compile unit where defined
                                     name,   // name
                                     file,   // file where defined
                                     linnum, // line number where defined
-                                    getTypeBitSize(T),      // size in bits
+                                    getTypeAllocSize(T) * 8, // size in bits
                                     getABITypeAlign(T) * 8, // alignment in bits
                                     DIFlags::FlagFwdDecl,   // flags
                                     derivedFrom,            // DerivedFrom
@@ -432,9 +433,9 @@ ldc::DIType ldc::DIBuilder::CreateArrayType(Type *type) {
       llvm::StringRef(), // Name TODO: Really no name for arrays? t->toChars()?
       file,              // File
       0,                 // LineNo
-      getTypeBitSize(T), // size in bits
-      getABITypeAlign(T) * 8, // alignment in bits
-      0,                      // What here?
+      getTypeAllocSize(T) * 8, // size in bits
+      getABITypeAlign(T) * 8,  // alignment in bits
+      0,                       // What here?
 #if LDC_LLVM_VER >= 307
       nullptr, // DerivedFrom
 #else
@@ -467,7 +468,7 @@ ldc::DIType ldc::DIBuilder::CreateSArrayType(Type *type) {
   ldc::DIType basetype(CreateTypeDescription(t, false));
 
   return DBuilder.createArrayType(
-      getTypeBitSize(T),                    // size (bits)
+      getTypeAllocSize(T) * 8,              // size (bits)
       getABITypeAlign(T) * 8,               // align (bits)
       basetype,                             // element type
       DBuilder.getOrCreateArray(subscripts) // subscripts
@@ -485,27 +486,21 @@ ldc::DISubroutineType ldc::DIBuilder::CreateFunctionType(Type *type) {
   TypeFunction *t = static_cast<TypeFunction *>(type);
   Type *retType = t->next;
 
-  Loc loc(IR->dmodule->srcfile->toChars(), 0, 0);
-  ldc::DIFile file(CreateFile(loc));
-
 // Create "dummy" subroutine type for the return type
 #if LDC_LLVM_VER == 305
   llvm::SmallVector<llvm::Value *, 16> Elts;
-  llvm::DIArray EltTypeArray = DBuilder.getOrCreateArray(Elts);
+  auto EltTypeArray = DBuilder.getOrCreateArray(Elts);
 #else
   llvm::SmallVector<llvm::Metadata *, 16> Elts;
-#if LDC_LLVM_VER >= 307
-  llvm::DITypeRefArray EltTypeArray = DBuilder.getOrCreateTypeArray(Elts);
-#else
-  llvm::DITypeArray EltTypeArray = DBuilder.getOrCreateTypeArray(Elts);
+  auto EltTypeArray = DBuilder.getOrCreateTypeArray(Elts);
 #endif
-#endif
-
   Elts.push_back(CreateTypeDescription(retType, true));
 
 #if LDC_LLVM_VER >= 308
   return DBuilder.createSubroutineType(EltTypeArray);
 #else
+  Loc loc(IR->dmodule->srcfile->toChars(), 0, 0);
+  ldc::DIFile file(CreateFile(loc));
   return DBuilder.createSubroutineType(file, EltTypeArray);
 #endif
 }
@@ -514,9 +509,6 @@ ldc::DISubroutineType ldc::DIBuilder::CreateDelegateType(Type *type) {
   // FIXME: Implement
   TypeDelegate *t = static_cast<TypeDelegate *>(type);
 
-  Loc loc(IR->dmodule->srcfile->toChars(), 0, 0);
-  ldc::DIFile file(CreateFile(loc));
-
 // Create "dummy" subroutine type for the return type
 #if LDC_LLVM_VER >= 306
   llvm::SmallVector<llvm::Metadata *, 16> Elts;
@@ -524,16 +516,17 @@ ldc::DISubroutineType ldc::DIBuilder::CreateDelegateType(Type *type) {
   llvm::SmallVector<llvm::Value *, 16> Elts;
 #endif
   Elts.push_back(DBuilder.createUnspecifiedType(type->toChars()));
-#if LDC_LLVM_VER >= 307
-  llvm::DITypeRefArray EltTypeArray = DBuilder.getOrCreateTypeArray(Elts);
-#elif LDC_LLVM_VER >= 306
-  llvm::DITypeArray EltTypeArray = DBuilder.getOrCreateTypeArray(Elts);
+#if LDC_LLVM_VER >= 306
+  auto EltTypeArray = DBuilder.getOrCreateTypeArray(Elts);
 #else
-  llvm::DIArray EltTypeArray = DBuilder.getOrCreateArray(Elts);
+  auto EltTypeArray = DBuilder.getOrCreateArray(Elts);
 #endif
+
 #if LDC_LLVM_VER >= 308
   return DBuilder.createSubroutineType(EltTypeArray);
 #else
+  Loc loc(IR->dmodule->srcfile->toChars(), 0, 0);
+  ldc::DIFile file(CreateFile(loc));
   return DBuilder.createSubroutineType(file, EltTypeArray);
 #endif
 }
@@ -914,10 +907,8 @@ void ldc::DIBuilder::EmitLocalVariable(llvm::Value *ll, VarDeclaration *vd,
   if (vd->isParameter()) {
     FuncDeclaration *fd = vd->parent->isFuncDeclaration();
     assert(fd);
-    int argNo;
-    if (fd->vthis == vd) {
-      argNo = 0;
-    } else {
+    size_t argNo = 0;
+    if (fd->vthis != vd) {
       assert(fd->parameters);
       for (argNo = 0; argNo < fd->parameters->dim; argNo++) {
         if ((*fd->parameters)[argNo] == vd) {

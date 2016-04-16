@@ -340,10 +340,12 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
     const char *thunkName = nameBuf.extractString();
     llvm::Function *thunk = gIR->module.getFunction(thunkName);
     if (!thunk) {
+      const LinkageWithCOMDAT lwc(LLGlobalValue::LinkOnceODRLinkage,
+                                  supportsCOMDAT());
       thunk = LLFunction::Create(
-          isaFunction(irFunc->func->getType()->getContainedType(0)),
-          llvm::GlobalValue::LinkOnceODRLinkage, thunkName, &gIR->module);
-      SET_COMDAT(thunk, gIR->module);
+          isaFunction(irFunc->func->getType()->getContainedType(0)), lwc.first,
+          thunkName, &gIR->module);
+      setLinkage(lwc, thunk);
       thunk->copyAttributesFrom(irFunc->func);
 
       // Thunks themselves don't have an identity, only the target
@@ -373,7 +375,7 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
                                    : 1];
       LLType *targetThisType = thisArg->getType();
       thisArg = DtoBitCast(thisArg, getVoidPtrType());
-      thisArg = DtoGEP1(thisArg, DtoConstInt(-b->offset));
+      thisArg = DtoGEP1(thisArg, DtoConstInt(-b->offset), true);
       thisArg = DtoBitCast(thisArg, targetThisType);
 
       // call the real vtbl function.
@@ -405,13 +407,11 @@ llvm::GlobalVariable *IrAggr::getInterfaceVtbl(BaseClass *b, bool new_instance,
   mangledName.append(mangle(b->base));
   mangledName.append("6__vtblZ");
 
-  const LinkageWithCOMDAT lwc = DtoLinkage(cd);
-  llvm::GlobalVariable *GV =
+  const auto lwc = DtoLinkage(cd);
+  LLGlobalVariable *GV =
       getOrCreateGlobal(cd->loc, gIR->module, vtbl_constant->getType(), true,
                         lwc.first, vtbl_constant, mangledName);
-  if (lwc.second) {
-    SET_COMDAT(GV, gIR->module);
-  }
+  setLinkage(lwc, GV);
 
   // insert into the vtbl map
   interfaceVtblMap.insert(std::make_pair(b->base, GV));
@@ -503,11 +503,7 @@ LLConstant *IrAggr::getClassInfoInterfaces() {
   // create and apply initializer
   LLConstant *arr = LLConstantArray::get(array_type, constants);
   classInterfacesArray->setInitializer(arr);
-  const LinkageWithCOMDAT lwc = DtoLinkage(cd);
-  classInterfacesArray->setLinkage(lwc.first);
-  if (lwc.second) {
-    SET_COMDAT(classInterfacesArray, gIR->module);
-  }
+  setLinkage(cd, classInterfacesArray);
 
   // return null, only baseclass provide interfaces
   if (cd->vtblInterfaces->dim == 0) {

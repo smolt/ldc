@@ -175,6 +175,7 @@ static void hide(llvm::StringMap<cl::Option *> &map, const char *name) {
   }
 }
 
+#if LDC_LLVM_VER >= 307
 static void rename(llvm::StringMap<cl::Option *> &map, const char *from,
                    const char *to) {
   auto i = map.find(from);
@@ -185,6 +186,7 @@ static void rename(llvm::StringMap<cl::Option *> &map, const char *from,
     map[to] = opt;
   }
 }
+#endif
 
 /// Removes command line options exposed from within LLVM that are unlikely
 /// to be useful for end users from the -help output.
@@ -529,28 +531,32 @@ static void initializePasses() {
   // Initialize passes
   PassRegistry &Registry = *PassRegistry::getPassRegistry();
   initializeCore(Registry);
+  initializeTransformUtils(Registry);
+  initializeScalarOpts(Registry);
+  initializeObjCARCOpts(Registry);
+  initializeVectorization(Registry);
+  initializeInstCombine(Registry);
+  initializeIPO(Registry);
+  initializeInstrumentation(Registry);
+  initializeAnalysis(Registry);
+  initializeCodeGen(Registry);
+#if LDC_LLVM_VER >= 309
+  initializeGlobalISel(Registry);
+#endif
+  initializeTarget(Registry);
+
+  // Initialize passes not included above
 #if LDC_LLVM_VER < 306
   initializeDebugIRPass(Registry);
 #endif
-  initializeScalarOpts(Registry);
-  initializeVectorization(Registry);
-  initializeIPO(Registry);
-  initializeAnalysis(Registry);
 #if LDC_LLVM_VER < 308
   initializeIPA(Registry);
 #endif
-  initializeTransformUtils(Registry);
-  initializeInstCombine(Registry);
-  initializeInstrumentation(Registry);
-  initializeTarget(Registry);
-  // For codegen passes, only passes that do IR to IR transformation are
-  // supported. For now, just add CodeGenPrepare.
-  initializeCodeGenPreparePass(Registry);
 #if LDC_LLVM_VER >= 306
-  initializeAtomicExpandPass(Registry);
   initializeRewriteSymbolsPass(Registry);
-#else
-  initializeAtomicExpandLoadLinkedPass(Registry);
+#endif
+#if LDC_LLVM_VER >= 307
+  initializeSjLjEHPreparePass(Registry);
 #endif
 }
 
@@ -581,7 +587,9 @@ static void registerPredefinedFloatABI(const char *soft, const char *hard,
 // Use target floating point unit instead of s/w float routines
 #if LDC_LLVM_VER >= 307
   // FIXME: This is a semantic change!
-  bool useFPU = gTargetMachine->Options.FloatABIType == llvm::FloatABI::Hard;
+  //bool useFPU = gTargetMachine->Options.FloatABIType == llvm::FloatABI::Hard;
+  // hardcode for iOS softfp, but breaks soft
+  bool useFPU = true;
 #else
   bool useFPU = !gTargetMachine->Options.UseSoftFloat;
 #endif
@@ -638,6 +646,7 @@ static void registerPredefinedTargetVersions() {
     registerPredefinedFloatABI("ARM_SoftFloat", "ARM_HardFloat", "ARM_SoftFP");
     break;
   case llvm::Triple::thumb:
+  case llvm::Triple::thumbeb:
     VersionCondition::addPredefinedGlobalIdent("ARM");
     VersionCondition::addPredefinedGlobalIdent(
         "Thumb"); // For backwards compatibility.
@@ -1017,12 +1026,7 @@ int main(int argc, char **argv) {
   {
     llvm::Triple triple = llvm::Triple(gTargetMachine->getTargetTriple());
     global.params.targetTriple = triple;
-    global.params.isLinux = triple.getOS() == llvm::Triple::Linux;
-    global.params.isOSX = triple.isOSDarwin(); // MacOS, iOS are OSX
     global.params.isWindows = triple.isOSWindows();
-    global.params.isFreeBSD = triple.getOS() == llvm::Triple::FreeBSD;
-    global.params.isOpenBSD = triple.getOS() == llvm::Triple::OpenBSD;
-    global.params.isSolaris = triple.getOS() == llvm::Triple::Solaris;
     global.params.isLP64 = gDataLayout->getPointerSizeInBits() == 64;
     global.params.is64bit = triple.isArch64Bit();
   }
