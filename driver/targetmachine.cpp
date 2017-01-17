@@ -96,7 +96,11 @@ MipsABI::Type getMipsABI() {
 #endif
     if (dl.getPointerSizeInBits() == 64)
       return MipsABI::N64;
+#if LDC_LLVM_VER >= 309
+    else if (dl.getLargestLegalIntTypeSizeInBits() == 64)
+#else
     else if (dl.getLargestLegalIntTypeSize() == 64)
+#endif
       return MipsABI::N32;
     else
       return MipsABI::O32;
@@ -431,7 +435,12 @@ llvm::TargetMachine *createTargetMachine(
     std::string iosArch, // if set, targetTriple and arch not
     std::string targetTriple, std::string arch, std::string cpu,
     std::vector<std::string> attrs, ExplicitBitness::Type bitness,
-    FloatABI::Type floatABI, llvm::Reloc::Model relocModel,
+    FloatABI::Type floatABI,
+#if LDC_LLVM_VER >= 309
+    llvm::Optional<llvm::Reloc::Model> relocModel,
+#else
+    llvm::Reloc::Model relocModel,
+#endif
     llvm::CodeModel::Model codeModel, llvm::CodeGenOpt::Level codeGenOptLevel,
     bool noFramePointerElim, bool noLinkerStripDead) {
   if (!cpu.empty() && cpu == "native") {
@@ -553,7 +562,11 @@ llvm::TargetMachine *createTargetMachine(
   }
 
   // Handle cases where LLVM picks wrong default relocModel
+#if LDC_LLVM_VER >= 309
+  if (!relocModel.hasValue()) {
+#else
   if (relocModel == llvm::Reloc::Default) {
+#endif
     if (triple.isOSDarwin()) {
       // Darwin defaults to PIC (and as of 10.7.5/LLVM 3.1-3.3, TLS use leads
       // to crashes for non-PIC code). LLVM doesn't handle this.

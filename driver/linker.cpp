@@ -24,6 +24,7 @@
 #include "llvm/Support/Path.h"
 #if _WIN32
 #include "llvm/Support/SystemUtils.h"
+#include "llvm/Support/ConvertUTF.h"
 #include <Windows.h>
 #endif
 
@@ -153,7 +154,11 @@ static int linkObjToBinaryGcc(bool sharedLib, bool fullyStatic) {
     // Don't push -l and -L switches using -Xlinker, but pass them indirectly
     // via GCC. This makes sure user-defined paths take precedence over
     // GCC's builtin LIBRARY_PATHs.
-    if (!p[0] || !(p[0] == '-' && (p[1] == 'l' || p[1] == 'L'))) {
+    // Options starting with -shared and -static are not handled by
+    // the linker and must be passed to the driver.
+    auto str = llvm::StringRef(p);
+    if (!(str.startswith("-l") || str.startswith("-L") ||
+          str.startswith("-shared") || str.startswith("-static"))) {
       args.push_back("-Xlinker");
     }
     args.push_back(p);
@@ -164,10 +169,15 @@ static int linkObjToBinaryGcc(bool sharedLib, bool fullyStatic) {
   switch (global.params.targetTriple.getOS()) {
   case llvm::Triple::Linux:
     addSoname = true;
-    args.push_back("-lrt");
     if (!opts::disableLinkerStripDead) {
       args.push_back("-Wl,--gc-sections");
     }
+    if (global.params.targetTriple.getEnvironment() == llvm::Triple::Android) {
+        args.push_back("-ldl");
+        args.push_back("-lm");
+        break;
+    }
+    args.push_back("-lrt");
   // fallthrough
   case llvm::Triple::Darwin:
   case llvm::Triple::MacOSX:
@@ -348,9 +358,17 @@ int executeAndWait(const char *commandLine) {
 
   DWORD exitCode;
 
+#if UNICODE
+  std::wstring wcommandLine;
+  if (!llvm::ConvertUTF8toWide(commandLine, wcommandLine))
+    return -3;
+  auto cmdline = const_cast<wchar_t *>(wcommandLine.data());
+#else
+  auto cmdline = const_cast<char *>(commandLine);
+#endif
   // according to MSDN, only CreateProcessW (unicode) may modify the passed
   // command line
-  if (!CreateProcess(NULL, const_cast<char *>(commandLine), NULL, NULL, TRUE, 0,
+  if (!CreateProcess(NULL, cmdline, NULL, NULL, TRUE, 0,
                      NULL, NULL, &si, &pi)) {
     exitCode = -1;
   } else {

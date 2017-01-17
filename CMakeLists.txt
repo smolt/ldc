@@ -37,7 +37,7 @@ include(GetLinuxDistribution)
 #
 
 # Version information
-set(LDC_VERSION "0.17.1") # May be overridden by git hash tag
+set(LDC_VERSION "0.17.3") # May be overridden by git hash tag
 set(DMDFE_MAJOR_VERSION   2)
 set(DMDFE_MINOR_VERSION   0)
 set(DMDFE_PATCH_VERSION   68)
@@ -257,7 +257,15 @@ if(NOT TAG MATCHES "NOTFOUND")
 else()
     get_git_head_revision(REFSPEC HASH)
     if(NOT HASH STREQUAL "GITDIR-NOTFOUND")
-        string(SUBSTRING "${HASH}" 0 6 LDC_VERSION)
+        # Append git hash to LDC_VERSION
+        string(SUBSTRING "${HASH}" 0 7 LDC_VERSION_HASH)
+        set(LDC_VERSION "${LDC_VERSION}git-${LDC_VERSION_HASH}")
+
+        # Append "-dirty" when the working copy is dirty
+        git_describe(GIT_DIRTY --dirty)
+        if (GIT_DIRTY MATCHES ".*-dirty")
+            set(LDC_VERSION "${LDC_VERSION}-dirty")
+        endif()
     endif()
 endif()
 message(STATUS "LDC version identifier: ${LDC_VERSION}")

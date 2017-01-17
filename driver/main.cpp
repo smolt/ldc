@@ -31,6 +31,7 @@
 #include "gen/irstate.h"
 #include "gen/linkage.h"
 #include "gen/llvm.h"
+#include "gen/llvmhelpers.h"
 #include "gen/logger.h"
 #include "gen/metadata.h"
 #include "gen/optimizer.h"
@@ -102,6 +103,20 @@ static cl::opt<bool> staticFlag(
     cl::desc(
         "Create a statically linked binary, including all system dependencies"),
     cl::ZeroOrMore);
+
+#if LDC_LLVM_VER >= 309
+static inline llvm::Optional<llvm::Reloc::Model> getRelocModel() {
+  if (mRelocModel.getNumOccurrences()) {
+    llvm::Reloc::Model R = mRelocModel;
+    return R;
+  }
+  return llvm::None;
+}
+#else
+static inline llvm::Reloc::Model getRelocModel() {
+  return mRelocModel;
+}
+#endif
 
 void printVersion() {
   printf("LDC - the LLVM D compiler (%s):\n", global.ldc_version);
@@ -504,7 +519,11 @@ static void parseCommandLine(int argc, char **argv, Strings &sourceFiles,
     error(Loc(), "-lib and -shared switches cannot be used together");
   }
 
+#if LDC_LLVM_VER >= 309
+  if (createSharedLib && !mRelocModel.getNumOccurrences()) {
+#else
   if (createSharedLib && mRelocModel == llvm::Reloc::Default) {
+#endif
     mRelocModel = llvm::Reloc::PIC_;
   }
 
@@ -552,7 +571,9 @@ static void initializePasses() {
 #if LDC_LLVM_VER < 308
   initializeIPA(Registry);
 #endif
-#if LDC_LLVM_VER >= 306
+#if LDC_LLVM_VER >= 400
+  initializeRewriteSymbolsLegacyPassPass(Registry);
+#elif LDC_LLVM_VER >= 306
   initializeRewriteSymbolsPass(Registry);
 #endif
 #if LDC_LLVM_VER >= 307
@@ -742,12 +763,12 @@ static void registerPredefinedTargetVersions() {
     }
     break;
   case llvm::Triple::Linux:
+    VersionCondition::addPredefinedGlobalIdent("linux");
+    VersionCondition::addPredefinedGlobalIdent("Posix");
     if (global.params.targetTriple.getEnvironment() == llvm::Triple::Android) {
       VersionCondition::addPredefinedGlobalIdent("Android");
       VersionCondition::addPredefinedGlobalIdent("CRuntime_Bionic");
     } else {
-      VersionCondition::addPredefinedGlobalIdent("linux");
-      VersionCondition::addPredefinedGlobalIdent("Posix");
       VersionCondition::addPredefinedGlobalIdent("CRuntime_Glibc");
     }
     break;
@@ -939,7 +960,11 @@ static bool validiOSArch(const std::string &iosArch) {
 
 int main(int argc, char **argv) {
   // stack trace on signals
+#if LDC_LLVM_VER >= 309
+  llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
+#else
   llvm::sys::PrintStackTraceOnErrorSignal();
+#endif
 
   exe_path::initialize(argv[0], reinterpret_cast<void *>(main));
 
@@ -1009,7 +1034,7 @@ int main(int argc, char **argv) {
 
   gTargetMachine = createTargetMachine(
       iosArch, mTargetTriple, mArch, mCPU, mAttrs, bitness, mFloatABI,
-      mRelocModel, mCodeModel, codeGenOptLevel(), disableFpElim,
+      getRelocModel(), mCodeModel, codeGenOptLevel(), disableFpElim,
       disableLinkerStripDead);
 
 #if LDC_LLVM_VER >= 308
@@ -1332,7 +1357,7 @@ int main(int argc, char **argv) {
 
   // Generate one or more object/IR/bitcode files.
   if (global.params.obj && !modules.empty()) {
-    ldc::CodeGenerator cg(llvm::getGlobalContext(), singleObj);
+    ldc::CodeGenerator cg(getGlobalContext(), singleObj);
 
     for (unsigned i = 0; i < modules.dim; i++) {
       Module *const m = modules[i];
