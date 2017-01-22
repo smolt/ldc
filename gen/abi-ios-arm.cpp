@@ -57,60 +57,33 @@ bool isStructSimple(TypeStruct *t) {
   // [that is r0]."
   return (t->Type::size() <= 4 && isStructIntegerLike(t));
 }
-
-struct CompositeToArray32 : ABIRewrite {
-  LLValue *get(Type *dty, LLValue *v) {
-    Logger::println("rewriting i32 array -> as %s", dty->toChars());
-    LLValue *lval = DtoRawAlloca(v->getType(), 0);
-    DtoStore(v, lval);
-
-    LLType *pTy = getPtrToType(DtoType(dty));
-    return DtoLoad(DtoBitCast(lval, pTy), "get-result");
-  }
-
-  LLValue *put(DValue *dv) {
-    Type *dty = dv->getType();
-    Logger::println("rewriting %s -> as i32 array", dty->toChars());
-    LLType *t = type(dty, nullptr);
-    return DtoLoad(DtoBitCast(dv->getRVal(), getPtrToType(t)));
-  }
-
-  LLType *type(Type *t, LLType *) {
-    // An i32 array that will hold Type 't'
-    size_t sz = (t->size() + 3) / 4;
-    return LLArrayType::get(LLIntegerType::get(gIR->context(), 32), sz);
-  }
-};
 } // end local stuff
 
 struct IOSArmTargetABI : TargetABI {
   CompositeToArray32 compositeToArray32;
 
-  bool returnInArg(TypeFunction *tf) {
+  bool returnInArg(TypeFunction *tf) override {
+    // Return composites in an arg, however APCS 10.3.3 says simple
+    // integer-like structs should be returned in r0.  Doesn't apply to
+    // non-POD structs.
     if (tf->isref)
       return false;
 
-    // Normally return static arrays and structs in an sret arg, but need
-    // to make an exception for "simple" integer-like structs to be
-    // compatible with the C ABI.  APCS 10.3.3 says integer-like structs
-    // should be returned in r0.  Doesn't work for extern(D) with non-POD
-    // structs for some reason I haven't tracked down yet (failure in
-    // std.algorithm.move when struct has a ctor).
     Type *rt = tf->next->toBasetype();
-    if (tf->linkage == LINKd)
-      return rt->ty == Tstruct || rt->ty == Tsarray;
+    if (!isPOD(rt))
+      return true;
 
-    // C/C++ ABI (and others until we know better)
     return ((rt->ty == Tstruct && !isStructSimple((TypeStruct *)rt)) ||
             rt->ty == Tsarray);
   }
 
-  bool passByVal(Type *t) {
-    // Do not use llvm byval attribute as clang does not use for C ABI.
-    // Plus there seems to be a llvm optimizer problem in the "top-down
-    // list latency scheduler" pass that reorders instructions
-    // incorrectly.
-    return false;
+  bool passByVal(Type *t) override {
+    // APCS does not use an indirect arg to pass aggregates, however
+    // clang uses byval for types > 64-bytes, then llvm backend
+    // converts back to non-byval.  Without this special handling the
+    // optimzer generates bad code (e.g. std.random unittest crash).
+    t = t->toBasetype();
+    return ((t->ty == Tsarray || t->ty == Tstruct) && t->size() > 64);
 
 // the codegen is horrible for arrays passed by value - tries to do
 // copy without a loop for huge arrays.  Would be better if byval
@@ -122,20 +95,24 @@ struct IOSArmTargetABI : TargetABI {
 #endif
   }
 
-  void rewriteFunctionType(TypeFunction *tf, IrFuncTy &fty) {
+  void rewriteFunctionType(TypeFunction *tf, IrFuncTy &fty) override {
     for (auto arg : fty.args) {
       if (!arg->byref)
         rewriteArgument(fty, *arg);
     }
+
+    // extern(D): reverse parameter order for non variadics, for DMD-compliance
+    if (tf->linkage == LINKd && tf->varargs != 1 && fty.args.size() > 1) {
+      fty.reverseParams = true;
+    }
   }
 
-  void rewriteArgument(IrFuncTy &fty, IrFuncTyArg &arg) {
-    // rewrite structs and arrays passed by value as llvm i32 arrays.
-    // This keeps data layout unchanged when passed in arg registers r0-r3
-    // and is necessary to match clang's C ABI for struct passing.
-    // Without out this rewrite, each field or array element is passed in
-    // own register.  For example: char[4] now all fits in r0, where
-    // before it consumed r0-r3.
+  void rewriteArgument(IrFuncTy &fty, IrFuncTyArg &arg) override {
+    // structs and arrays need rewrite as i32 arrays.  This keeps data layout
+    // unchanged when passed in registers r0-r3 and is necessary to match C ABI
+    // for struct passing.  Without out this rewrite, each field or array
+    // element is passed in own register.  For example: char[4] now all fits in
+    // r0, where before it consumed r0-r3.
     Type *ty = arg.type->toBasetype();
 
     // TODO: want to also rewrite Tsarray as i32 arrays, but sometimes
