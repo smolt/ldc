@@ -576,6 +576,10 @@ if(IPHONEOS_ARCHS)
 
     findsdk(iphoneos dev_sdk)
     findsdk(iphonesimulator sim_sdk)
+    # Need to unset these for newer cmake to override host detection
+    # and adding macosx flags
+    unset(CMAKE_C_OSX_DEPLOYMENT_TARGET_FLAG)
+    unset(CMAKE_C_SYSROOT_FLAG)
     set(dev_cflags "-isysroot ${dev_sdk} -miphoneos-version-min=5.1")
     set(sim_cflags "-isysroot ${sim_sdk} -mios-simulator-version-min=5.1")
     set(libs)
