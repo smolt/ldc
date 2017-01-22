@@ -717,6 +717,10 @@ static void addCoverageAnalysisInitializer(Module *m) {
 static void genModuleInfo(Module *m, bool emitFullModuleInfo);
 
 static void genFakeBitCode(IRState *p) {
+  // TODO: disabled because LLVM 3.9.1 EmitSpecialLLVMGlobal says these are
+  // "unknown special variable", detected because of AppendingLinkage.
+  // will need to resolve for watchOS later
+#if 0
   // make bitcode sections without any real contents.  This seems to satisfy
   // the linker
   llvm::StringRef s("", 0);
@@ -729,6 +733,7 @@ static void genFakeBitCode(IRState *p) {
       p->module, init->getType(), true, llvm::GlobalValue::AppendingLinkage,
       init, "llvm.cmdline");
   llvmCmdline->setSection("__LLVM,__cmdline");
+#endif
 }
 
 
