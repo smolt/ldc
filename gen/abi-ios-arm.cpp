@@ -57,11 +57,45 @@ bool isStructSimple(TypeStruct *t) {
   // [that is r0]."
   return (t->Type::size() <= 4 && isStructIntegerLike(t));
 }
+
+// Hacked in to do ARM APCS byval rewrites like clang with correct alignment.
+// This is based on something similar in abi-x86-64.cpp
+struct ImplicitByvalRewrite : ABIRewrite {
+  LLValue *get(Type *dty, LLValue *v) override {
+    return DtoLoad(v, ".ImplicitByvalRewrite_getResult");
+  }
+
+  void getL(Type *dty, LLValue *v, LLValue *lval) override {
+    DtoMemCpy(lval, v);
+  }
+
+  LLValue *put(DValue *v) override {
+    // if v alignment is good enough (ACPS iOS says 4-byte alignment), can use
+    // as is, otherwise need to make a copy. Note that clang also makes a copy
+    // if v is locatd in a different address space, which we are ignoring here.
+    Type *dty = v->getType();
+    const unsigned align = DtoAlignment(dty);
+    if (align >= 4) {
+      return getAddressOf(v);
+    }
+    
+    LLValue *originalPointer = v->getRVal();
+    LLType *type = originalPointer->getType()->getPointerElementType();
+    LLValue *copyForCallee =
+      DtoRawAlloca(type, 4, ".ImplicitByvalRewrite_putResult");
+    DtoMemCpy(copyForCallee, originalPointer);
+    return copyForCallee;
+  }
+
+  LLType *type(Type *dty, LLType *t) override { return DtoPtrToType(dty); }
+};
+
 } // end local stuff
 
 struct IOSArmTargetABI : TargetABI {
   CompositeToArray32 compositeToArray32;
-
+  ImplicitByvalRewrite byvalRewrite;
+  
   bool returnInArg(TypeFunction *tf) override {
     // Return composites in an arg, however APCS 10.3.3 says simple
     // integer-like structs should be returned in r0.  Doesn't apply to
@@ -82,8 +116,17 @@ struct IOSArmTargetABI : TargetABI {
     // clang uses byval for types > 64-bytes, then llvm backend
     // converts back to non-byval.  Without this special handling the
     // optimzer generates bad code (e.g. std.random unittest crash).
+
+    // TODO: Using below as is in abi-arm wasn't setting up proper alignment
+    // for iOS (needs to be byval with align 4).  Revised to use
+    // ImplicitByvalRewrite instead.  Can clean this up after determining if
+    // abi-arm.cpp is ok or needs this too.
+#if 0
     t = t->toBasetype();
     return ((t->ty == Tsarray || t->ty == Tstruct) && t->size() > 64);
+#else    
+    return false;
+#endif
 
 // the codegen is horrible for arrays passed by value - tries to do
 // copy without a loop for huge arrays.  Would be better if byval
@@ -120,8 +163,14 @@ struct IOSArmTargetABI : TargetABI {
     // unaligned (e.g. walking through members of array char[5][]).
     // if (ty->ty == Tstruct || ty->ty == Tsarray)
     if (ty->ty == Tstruct) {
-      arg.rewrite = &compositeToArray32;
-      arg.ltype = compositeToArray32.type(arg.type, arg.ltype);
+      if (ty->size() > 64) {
+        arg.rewrite = &byvalRewrite;
+        arg.ltype = arg.ltype->getPointerTo();
+        arg.attrs.addByVal(4);
+      } else {
+        arg.rewrite = &compositeToArray32;
+        arg.ltype = compositeToArray32.type(arg.type, arg.ltype);
+      }
     }
   }
 };
